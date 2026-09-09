@@ -1,0 +1,24 @@
+# ---------------------------------------------------------------------------
+# YOUR TOPICS OF INTEREST
+#
+# One topic per line. Two formats, mix them freely:
+#
+#   Topic Name
+#   Topic Name: keyword, another keyword, phrase to watch
+#
+# The keywords after the colon are optional hints. They give you a fast,
+# free, exact-match path AND they sharpen the LLM's semantic judgement,
+# so they are worth adding for anything you care about a lot.
+#
+# Lines starting with # are ignored. Edit this file any time -- it is read
+# fresh on every run, so no restart or re-ingest is needed.
+# ---------------------------------------------------------------------------
+
+Artificial Intelligence: AI, machine learning, LLM, neural network, OpenAI, Anthropic, generative AI, chatbot
+Indian Economy: GDP, RBI, inflation, repo rate, fiscal deficit, union budget, GST, rupee
+Startups & Funding: startup, seed round, Series A, venture capital, valuation, IPO, unicorn
+Software Engineering: developer, open source, programming, cloud, AWS, Azure, cybersecurity, data breach
+Health & Medicine: vaccine, clinical trial, WHO, disease outbreak, hospital, drug approval
+Climate & Environment: climate change, emissions, renewable, solar, monsoon, pollution, air quality
+Education Policy: NEP, university, admission, curriculum, UGC, school reform
+Geopolitics: sanctions, treaty, border dispute, United Nations, trade war, diplomacy

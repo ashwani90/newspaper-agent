@@ -1,0 +1,9 @@
+langchain>=1.4,<2
+langchain-anthropic>=1.7,<2
+langgraph>=1.2,<2
+pypdf>=6.0
+pdfplumber>=0.11
+SQLAlchemy>=2.0
+python-dotenv>=1.0
+rich>=15.0
+reportlab>=5.0          # only used by scripts/make_sample_pdf.py

@@ -1,0 +1,147 @@
+Here are the articles I found across the three pages:
+
+```text
+### ARTICLE
+PAGE: 1
+**HEADLINE:** RBI holds repo rate at 6.25% as inflation eases to 4.1%
+BYLINE: By Meera Raghavan, Economics Bureau
+SECTION: FRONT PAGE
+CATEGORY: Economy
+ANCHOR: The Reserve Bank of India kept its benchmark repo rate unchanged at 6.25 per cent on Monday
+READ_MINUTES: 3
+CONTINUED: no
+SUMMARY: The RBI held the repo rate at 6.25% after retail inflation fell to a nine-month low of 4.1% in February.
+BULLET: The Monetary Policy Committee voted four to two to pause, ending three consecutive cuts.
+BULLET: GDP growth forecast for the coming fiscal year was trimmed to 6.7% from 6.9%.
+BULLET: The ten-year benchmark yield rose two basis points to 6.81% and the rupee closed at 87.42.
+BULLET: Economists are split on whether one more cut arrives before the July fiscal deficit review.
+ENTITIES: Reserve Bank of India, Sanjay Malhotra, Monetary Policy Committee
+WHY: A pause lets three earlier cuts work through the economy before the committee eases further.
+TOPIC: Indian Economy | 0.97 | Directly about RBI monetary policy, inflation and GDP forecasts
+### END
+
+### ARTICLE
+PAGE: 1
+HEADLINE: Anthropic opens Bengaluru research office, plans 300 hires
+BYLINE: By Arjun Nair, Technology Correspondent
+SECTION: FRONT PAGE
+CATEGORY: Technology
+ANCHOR: Artificial intelligence company Anthropic said it will open a research and engineering office in Bengaluru
+READ_MINUTES: 2
+CONTINUED: no
+SUMMARY: Anthropic will open its first India office in Bengaluru this year, hiring about 300 staff over eighteen months.
+BULLET: The office will focus on model evaluation, safety research and enterprise deployment for South and Southeast Asia.
+BULLET: Roughly half the roles will be for machine learning engineers.
+BULLET: OpenAI opened a New Delhi office last year amid a wider hiring scramble in India.
+ENTITIES: Anthropic, OpenAI, NASSCOM, Bengaluru
+WHY: It marks India capturing frontier AI research work rather than only support functions.
+TOPIC: Artificial Intelligence | 95% | An AI lab expanding its research operations
+TOPIC: Cricket | 0.8 | not a real topic, should be dropped
+### END
+
+### ARTICLE
+PAGE: 2
+HEADLINE: Fintech startup Kaviya raises $85 million Series C at $1.2 billion valuation
+BYLINE: By Priya Deshmukh
+SECTION: BUSINESS
+CATEGORY: Business
+ANCHOR: Bengaluru-based lending startup Kaviya has raised 85 million dollars in a Series C round
+READ_MINUTES: 2
+CONTINUED: no
+SUMMARY: Lending startup Kaviya raised $85 million in a Series C round at a $1.2 billion valuation, India's fourth unicorn this year.
+BULLET: The six-year-old company lends to small merchants through partner banks.
+BULLET: Capital will fund expansion into tier-three cities and transaction-data underwriting.
+BULLET: Indian fintech funding reached $4.1 billion across 210 deals last year.
+ENTITIES: Kaviya, Bengaluru
+TOPIC: Startups & Funding | 0.96 | A Series C round, valuation and unicorn status
+TOPIC: Indian Economy | 0.45 | Touches Indian lending and fintech funding levels
+### END
+
+### ARTICLE
+PAGE: 2
+HEADLINE: Cloud spending by Indian banks to cross $3 billion as AWS, Azure compete
+BYLINE: By Staff Reporter
+SECTION: BUSINESS
+CATEGORY: Technology
+ANCHOR: Indian banks and insurers will spend more than three billion dollars on public cloud services
+READ_MINUTES: 2
+CONTINUED: no
+SUMMARY: Indian banks and insurers will spend over $3 billion on public cloud this year as regulators grow comfortable with offshore processing.
+BULLET: AWS and Microsoft Azure together hold about 70% of the market.
+BULLET: Both built dedicated regions in Mumbai and Hyderabad for data localisation rules.
+BULLET: A November data breach at a private bank exposed 1.4 million customer records.
+ENTITIES: Amazon Web Services, Microsoft Azure, Mumbai, Hyderabad
+WHY: Tighter third-party audit requirements now follow any cloud provider serving Indian banks.
+TOPIC: Software Engineering | 0.9 | Cloud platforms, data localisation and a cybersecurity breach
+### END
+
+### ARTICLE
+PAGE: 2
+HEADLINE: Universal dengue vaccine clears mid-stage clinical trial
+BYLINE: By Dr Latha Krishnan
+SECTION: HEALTH
+CATEGORY: Health
+ANCHOR: A dengue vaccine designed to protect against all four viral serotypes has cleared
+READ_MINUTES: 2
+CONTINUED: no
+SUMMARY: A four-serotype dengue vaccine showed 78% efficacy across 4,200 participants in mid-stage trials in Pune and Chennai.
+BULLET: The WHO lists dengue among its top ten global health threats.
+BULLET: India recorded roughly 290,000 cases last year, likely a large undercount.
+BULLET: A phase three trial begins in September, with immunisation programmes possible by 2029.
+ENTITIES: World Health Organization, Pune, Chennai
+TOPIC: Health & Medicine | 0.98 | A vaccine clinical trial and drug approval pathway
+### END
+
+### ARTICLE
+PAGE: 3
+HEADLINE: Monsoon forecast trimmed as Indian Ocean warming accelerates
+BYLINE: By Environment Bureau
+SECTION: NATION
+CATEGORY: Environment
+ANCHOR: Forecasters lowered their prediction for this year
+READ_MINUTES: 2
+CONTINUED: no
+SUMMARY: Forecasters cut the southwest monsoon prediction to 94% of the long-period average, blaming rapid Indian Ocean warming.
+BULLET: Climate change is making the monsoon erratic rather than simply weaker.
+BULLET: Renewable additions hit a record 32 GW last year, but coal still supplies about 70% of generation.
+BULLET: Air quality in the northern plains stayed severe for 41 days this winter.
+ENTITIES: Indian Ocean
+WHY: An erratic monsoon with longer dry spells and extreme rainfall days reshapes agricultural planning.
+TOPIC: Climate & Environment | 0.97 | Monsoon disruption, emissions, renewables and air quality
+### END
+
+### ARTICLE
+PAGE: 3
+HEADLINE: UGC clears four-year degree rollout at 340 more universities
+SECTION: EDUCATION
+CATEGORY: Education
+ANCHOR: The University Grants Commission has approved the four-year undergraduate degree structure
+READ_MINUTES: 2
+CONTINUED: no
+SUMMARY: The UGC approved the four-year undergraduate structure at 340 more universities from the coming session.
+BULLET: The curriculum allows multiple exit points and credit transfer between institutions.
+BULLET: Vice-chancellors warn faculty shortages could slow implementation.
+BULLET: Admission cycles move to a common schedule next year.
+ENTITIES: University Grants Commission
+TOPIC: Education Policy | 0.96 | NEP rollout, curriculum and university admissions
+### END
+
+### ARTICLE
+PAGE: 3
+HEADLINE: Sanctions talks stall as trade war widens to semiconductors
+BYLINE: By Foreign Desk
+SECTION: WORLD
+CATEGORY: World
+ANCHOR: Negotiations over easing export sanctions collapsed without agreement on Friday
+READ_MINUTES: 2
+CONTINUED: no
+SUMMARY: Sanctions talks collapsed in Geneva with both delegations blaming the other, as the trade dispute widened to semiconductors.
+BULLET: New licensing requirements now affect chip manufacturing equipment.
+BULLET: A 2024 technology transfer treaty is effectively suspended.
+BULLET: Border corridor diplomacy continues on a separate track.
+ENTITIES: United Nations, Geneva
+TOPIC: Geopolitics | 0.98 | Sanctions, treaty suspension, trade war and diplomacy
+### END
+```
+
+That's all 8 articles. Let me know if you'd like deeper summaries on any of them.
