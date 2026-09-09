@@ -1,6 +1,6 @@
 ---
 name: newspaper
-description: Read a newspaper PDF end to end - extract the chosen pages, summarise every article, tag them against topics.txt, store them in SQLite and open an HTML reading page. Use when the user names a newspaper or e-paper PDF and wants it summarised, digested, or "read for me", optionally with page numbers (e.g. "summarise today.pdf pages 1-8,12"). Also use for "what's in the paper today", loading a paper into the news library, or regenerating the reading page. Costs nothing - you are the summarising model, so no API key is used.
+description: Read a newspaper PDF end to end - extract the chosen pages, summarise every article, tag them against topics.txt, store them in SQLite, publish to the PostgreSQL-backed webapp, and open an HTML reading page. Use when the user names a newspaper or e-paper PDF and wants it summarised, digested, or "read for me", optionally with page numbers (e.g. "summarise today.pdf pages 1-8,12"). Also use for "what's in the paper today", loading a paper into the news library, or regenerating the reading page. Costs nothing - you are the summarising model, so no API key is used.
 ---
 
 # Read a newspaper PDF in one go
@@ -110,25 +110,33 @@ Rules that matter more than the rest:
 ... -m newsagent html --since all
 ```
 
-### 6. (Optional) Publish to the PostgreSQL-backed webapp
+### 6. Publish to the PostgreSQL-backed webapp
 
-If the user has the webapp running (see `E:\newspaper-agent\webapp\README.md`),
-also push this edition so it shows up there:
+This is a standard part of the run, not an extra step to ask permission
+for — the point of this whole workflow is that the newspaper ends up
+summarised and queryable, and the webapp is now where that happens:
 
 ```
 ... -m newsagent push-web --edition <id>
 ```
 
-Only do this if the user has mentioned the webapp, asked for it, or it is
-otherwise clear they're using it — it needs the webapp process running and a
-real PostgreSQL connection, so silently attempting it against an unconfigured
-setup just produces a connection-error to explain away. Skip it by default.
+Run it right after step 5, every time, without waiting to be asked.
+`push-web` is read-only against the local SQLite side (it only reads what
+`load` already wrote there) and only writes to Postgres via the webapp's
+API, so it is safe to attempt unconditionally.
+
+If it fails because the webapp isn't running or Postgres isn't reachable,
+that is not a failure of the overall run: say so in one line (e.g. "webapp
+not running, so this edition wasn't pushed to the database — the HTML page
+and SQLite copy are still there") and report everything else normally. Do
+not treat it as blocking, and do not retry more than once.
 
 ## Report back
 
 Keep it to a few lines: how many articles, how many matched the user's
-topics, which pages you skipped and why, anything that failed, and the path
-to the HTML page. Then give the terminal alternative in one line:
+topics, which pages you skipped and why, anything that failed, the path to
+the HTML page, and whether the push to the webapp database succeeded (and
+if not, why). Then give the terminal alternative in one line:
 
 ```
 E:\newspaper-agent\.venv\Scripts\python.exe -m newsagent digest --since all --full
@@ -144,8 +152,13 @@ database. Mention any article whose full text could not be located.
   the exact line to add, but do not edit that file unless they ask.
 - Everything here is free and local. Do not use `newsagent ingest`, `ask`, or
   `chat` — those call the paid API. `prompt`, `load`, `pages`, `html`,
-  `digest`, `search` and `article` need no key.
+  `digest`, `search`, `article` and `push-web` need no key.
 - Re-running on the same PDF is safe: editions dedupe by file hash and
-  articles update in place rather than duplicating.
+  articles update in place rather than duplicating. `push-web` is equally
+  safe to re-run -- it matches on (newspaper, page, headline) in Postgres.
 - For a paper with several chunks, do them one at a time and load once at the
   end, or load after each — both work.
+- `push-web` needs `E:\newspaper-agent\webapp\README.md`'s setup (a running
+  `uvicorn webapp.main:app` process and a reachable PostgreSQL database with
+  real credentials in `.env`) -- see that file if it keeps failing and the
+  user wants it fixed rather than just noted.

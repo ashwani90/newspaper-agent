@@ -18,12 +18,17 @@ This skill is registered in Claude Code. To use it:
 /newspaper today.pdf pages 1-10
 ```
 
-The skill runs the manual workflow:
+The skill runs the whole thing in one go:
 1. Classifies pages (if needed)
 2. Builds prompts
 3. Walks you through summarizing each chunk
-4. Loads results
+4. Loads results into local SQLite
 5. Opens HTML reading page
+6. Pushes the edition to the PostgreSQL-backed webapp (`newsagent push-web`)
+
+Step 6 runs automatically every time — you don't need to ask for it
+separately. It only fails softly (reported, not blocking) if the webapp
+isn't running or Postgres isn't configured yet.
 
 ### Option 2: Direct Command Line
 
@@ -43,6 +48,9 @@ cd E:\newspaper-agent
 
 # View results
 .venv\Scripts\python.exe -m newsagent html --since all
+
+# Publish to the PostgreSQL-backed webapp
+.venv\Scripts\python.exe -m newsagent push-web --edition 1
 ```
 
 See **[README.md](../README.md)** for complete command reference.
@@ -72,6 +80,12 @@ See **[README.md](../README.md)** for complete command reference.
 5. **Read**
    - Run `newsagent html --since all`
    - Opens interactive reading page in browser
+
+6. **Publish**
+   - Run `newsagent push-web --edition <id>`
+   - Sends the edition to the PostgreSQL-backed webapp via its API
+   - Always attempted; a failure here (webapp not running, bad Postgres
+     creds) is reported but does not undo steps 1-5
 
 ## Key Rules
 
