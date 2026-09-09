@@ -52,9 +52,9 @@ inbox/
 *.pdf
 *.PDF
 
-# Reports and outputs
+# Reports and outputs (generated HTML digest, NOT webapp/static source files)
 reports/
-*.html
+reports/*.html
 *.xlsx
 *.csv
 

@@ -110,6 +110,20 @@ Rules that matter more than the rest:
 ... -m newsagent html --since all
 ```
 
+### 6. (Optional) Publish to the PostgreSQL-backed webapp
+
+If the user has the webapp running (see `E:\newspaper-agent\webapp\README.md`),
+also push this edition so it shows up there:
+
+```
+... -m newsagent push-web --edition <id>
+```
+
+Only do this if the user has mentioned the webapp, asked for it, or it is
+otherwise clear they're using it — it needs the webapp process running and a
+real PostgreSQL connection, so silently attempting it against an unconfigured
+setup just produces a connection-error to explain away. Skip it by default.
+
 ## Report back
 
 Keep it to a few lines: how many articles, how many matched the user's
@@ -135,27 +149,3 @@ database. Mention any article whose full text could not be located.
   articles update in place rather than duplicating.
 - For a paper with several chunks, do them one at a time and load once at the
   end, or load after each — both work.
-
-## Example Invocation
-
-User says: "Process today.pdf pages 1-10,15-20"
-
-```bash
-# 1. User gave pages, skip the pages command
-# 2. Build prompts
-.venv\Scripts\python.exe -m newsagent prompt "inbox\today.pdf" --pages 1-10,15-20
-# Output shows: prompts\edition-003, chunk-01.txt, chunk-02.txt, etc.
-
-# 3. Read chunk-01.txt → Summarize in Claude → Save reply-01.txt
-# Read chunk-02.txt → Summarize in Claude → Save reply-02.txt
-
-# 4. Load all replies
-.venv\Scripts\python.exe -m newsagent load "prompts\edition-003" --edition 3
-
-# 5. Generate reading page
-.venv\Scripts\python.exe -m newsagent html --since all
-
-# Report: "Processed today.pdf, pages 1-10,15-20. Found 24 articles. 8 matched your topics. 
-# Full text located for 20 articles. HTML page: E:\newspaper-agent\reports\digest.html
-# Terminal view: newsagent digest --since all --full"
-```

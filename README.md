@@ -12,6 +12,27 @@ everything in SQLite, and tags every article against the topics you keep in
 - **Command line:** See [Command Reference](#command-reference-all-commands) below for complete usage
 - **Skill docs:** See [skills/README.md](skills/README.md)
 
+## Web App (PostgreSQL + browser UI)
+
+There is now a real webapp: articles land in PostgreSQL via a FastAPI
+backend, and you browse/filter them (by newspaper, category, topic, date
+range, and full-text search) in a single-page UI instead of a static HTML
+file. The extraction and manual-chat workflow below is unchanged — the
+webapp is an additional publishing step, not a replacement for it.
+
+```bash
+# One-time: install deps, set real Postgres creds in .env, then run
+.venv\Scripts\python.exe -m uvicorn webapp.main:app --reload --port 8000
+
+# After the usual prompt -> paste -> load workflow, publish an edition:
+.venv\Scripts\python.exe -m newsagent push-web --edition 3
+```
+
+Open **http://localhost:8000** to read. Full setup, schema, and API
+reference: **[webapp/README.md](webapp/README.md)**.
+
+---
+
 ## Using from Claude Code (Recommended)
 
 A skill is registered for use in Claude Code. Simply invoke it:
@@ -591,6 +612,21 @@ powershell -c "Get-Clipboard" | .venv\Scripts\python.exe -m newsagent load - --e
 # Read one article in full
 .venv\Scripts\python.exe -m newsagent article 42
 ```
+
+### Publishing to the Web App
+
+```bash
+# Push the most recently loaded edition to the webapp (needs it running)
+.venv\Scripts\python.exe -m newsagent push-web
+
+# Push a specific edition
+.venv\Scripts\python.exe -m newsagent push-web --edition 3
+
+# Push to a webapp at a different URL than NEWSAGENT_API_URL
+.venv\Scripts\python.exe -m newsagent push-web --edition 3 --url http://192.168.1.10:8000
+```
+
+See [webapp/README.md](webapp/README.md) for running the webapp itself.
 
 ### Information & Management
 

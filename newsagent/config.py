@@ -30,6 +30,7 @@ class Config:
     prompts_dir: Path
     reports_dir: Path
     max_pages: int
+    webapp_api_url: str | None
 
     @property
     def db_url(self) -> str:
@@ -50,6 +51,7 @@ def load_config() -> Config:
         prompts_dir=_resolve(os.getenv("NEWSAGENT_PROMPTS", "prompts")),
         reports_dir=_resolve(os.getenv("NEWSAGENT_REPORTS", "reports")),
         max_pages=int(os.getenv("NEWSAGENT_MAX_PAGES", "0")),
+        webapp_api_url=os.getenv("NEWSAGENT_API_URL") or None,
     )
     cfg.db_path.parent.mkdir(parents=True, exist_ok=True)
     cfg.inbox.mkdir(parents=True, exist_ok=True)

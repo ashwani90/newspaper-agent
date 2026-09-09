@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Newspaper Agent</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>Newspaper Agent</h1>
+    <div class="stats" id="stats"></div>
+  </header>
+
+  <section class="filters">
+    <input id="search" type="search" placeholder="Search headline, summary, body... (press /)" />
+
+    <select id="newspaper">
+      <option value="">All newspapers</option>
+    </select>
+
+    <select id="category">
+      <option value="">All categories</option>
+    </select>
+
+    <select id="topic">
+      <option value="">All topics</option>
+    </select>
+
+    <label class="date-label">
+      From
+      <input id="dateFrom" type="date" />
+    </label>
+    <label class="date-label">
+      To
+      <input id="dateTo" type="date" />
+    </label>
+
+    <button id="clearFilters" class="secondary">Clear filters</button>
+  </section>
+
+  <main id="list" class="article-list">
+    <p class="empty">Loading articles...</p>
+  </main>
+
+  <footer class="pagination">
+    <button id="prevPage" class="secondary">&laquo; Prev</button>
+    <span id="pageInfo"></span>
+    <button id="nextPage" class="secondary">Next &raquo;</button>
+  </footer>
+
+  <div id="modalBackdrop" class="modal-backdrop" hidden>
+    <div class="modal" id="modal">
+      <button id="modalClose" class="modal-close" aria-label="Close">&times;</button>
+      <div id="modalBody"></div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

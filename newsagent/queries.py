@@ -44,6 +44,7 @@ def _article_dict(article: Article, *, include_body: bool = False) -> dict[str, 
             else None
         ),
         "topics": tags,
+        "body_source": article.body_source,
     }
     if summary is not None:
         data["summary"] = {
@@ -357,6 +358,36 @@ def export_articles(
                 continue
             out.append(data)
         return out
+
+
+def export_articles_by_edition(
+    edition_id: int, *, include_body: bool = True
+) -> dict[str, Any] | None:
+    """One edition's metadata plus every one of its articles as plain dicts.
+
+    Used by 'newsagent push-web' to send a single edition to the webapp API.
+    Returns None if the edition does not exist.
+    """
+    with session_scope() as session:
+        edition = session.get(Edition, edition_id)
+        if edition is None:
+            return None
+        stmt = _loaded(select(Article).where(Article.edition_id == edition_id)).order_by(
+            Article.page_number, Article.id
+        )
+        articles = session.scalars(stmt).unique().all()
+        return {
+            "edition_id": edition.id,
+            "source_name": edition.source_name,
+            "edition_date": edition.edition_date.isoformat()
+            if edition.edition_date
+            else None,
+            "pdf_path": edition.pdf_path,
+            "pdf_sha256": edition.pdf_sha256,
+            "articles": [
+                _article_dict(a, include_body=include_body) for a in articles
+            ],
+        }
 
 
 def unsummarised_article_ids(limit: int = 500) -> list[int]:

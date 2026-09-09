@@ -14,6 +14,9 @@ Reading it, no API key needed:
     python -m newsagent editions
     python -m newsagent stats
 
+Publishing to the PostgreSQL-backed webapp (see webapp/README.md):
+    python -m newsagent push-web [--edition N] [--url http://host:8000]
+
 Needs an API key:
     python -m newsagent ingest [PDF ...] [--force] [--max-pages N]
     python -m newsagent resummarise [--limit N]
@@ -36,6 +39,7 @@ from rich.table import Table
 
 from . import queries
 from .agent import build_agent, last_text
+from .api_client import push_articles
 from .config import CONFIG
 from .llm import MissingApiKey
 from .extract import (
@@ -280,9 +284,65 @@ def cmd_load(args: argparse.Namespace) -> int:
             "\n[bold]Next:[/bold] read it in your browser with "
             "[cyan]python -m newsagent html --since all[/cyan]\n"
             "[dim]or in the terminal with 'newsagent digest --since all --full'"
+            "[/dim]\n"
+            "[dim]or publish it to the webapp with 'newsagent push-web'"
             "[/dim]"
         )
     return 1 if failed else 0
+
+
+# --------------------------------------------------------------------------- #
+# push-web: send a loaded edition to the PostgreSQL-backed webapp
+# --------------------------------------------------------------------------- #
+
+
+def cmd_push_web(args: argparse.Namespace) -> int:
+    edition_id = args.edition
+    if edition_id is None:
+        rows = queries.list_editions(limit=1)
+        if not rows:
+            console.print(
+                "[yellow]No editions in the database.[/yellow] Run "
+                "'newsagent prompt' and 'newsagent load' first."
+            )
+            return 1
+        edition_id = rows[0]["edition_id"]
+
+    data = queries.export_articles_by_edition(edition_id, include_body=True)
+    if data is None:
+        console.print(f"[red]No edition with id {edition_id}[/red]")
+        return 1
+    if not data["articles"]:
+        console.print(
+            f"[yellow]Edition #{edition_id} has no articles yet.[/yellow] Run "
+            f"'newsagent load' for it first."
+        )
+        return 1
+
+    console.print(
+        f"Pushing edition #{edition_id} ({data['source_name']}, "
+        f"{len(data['articles'])} article(s)) to {args.url or CONFIG.webapp_api_url}"
+    )
+    report = push_articles(
+        newspaper_name=data["source_name"] or "Unknown",
+        edition_date=data["edition_date"],
+        source_file=data["pdf_path"],
+        file_hash=data["pdf_sha256"],
+        articles=data["articles"],
+        api_url=args.url,
+    )
+    console.print(
+        Panel(
+            "\n".join(report.as_lines()),
+            border_style="red" if report.errors else "green",
+            expand=False,
+        )
+    )
+    if not report.errors:
+        console.print(
+            "\n[dim]Open the webapp in your browser to read it there.[/dim]"
+        )
+    return 1 if report.errors else 0
 
 
 # --------------------------------------------------------------------------- #
@@ -740,6 +800,23 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_page_selection(p)
     p.set_defaults(func=cmd_ingest)
+
+    p = sub.add_parser(
+        "push-web",
+        help="[no API key] push a loaded edition to the PostgreSQL-backed webapp",
+    )
+    p.add_argument(
+        "--edition",
+        type=int,
+        default=None,
+        help="edition id to push (default: most recently ingested)",
+    )
+    p.add_argument(
+        "--url",
+        default=None,
+        help="webapp base URL (default: NEWSAGENT_API_URL from .env)",
+    )
+    p.set_defaults(func=cmd_push_web)
 
     p = sub.add_parser("digest", help="today's reading list, grouped by your topics")
     p.add_argument("--since", default="7d", help="window: 1d, 7d, 2w, ISO date, or all")
