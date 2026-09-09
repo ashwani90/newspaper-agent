@@ -7,7 +7,35 @@ articles out of the multi-column layout, summarises each one, stores
 everything in SQLite, and tags every article against the topics you keep in
 [`topics.txt`](topics.txt).
 
-**Quick Start:** See [Command Reference](#command-reference-all-commands) below for complete usage.
+**Quick Start:** 
+- **From Claude Code:** `/newspaper today.pdf` — uses the registered skill
+- **Command line:** See [Command Reference](#command-reference-all-commands) below for complete usage
+- **Skill docs:** See [skills/README.md](skills/README.md)
+
+## Using from Claude Code (Recommended)
+
+A skill is registered for use in Claude Code. Simply invoke it:
+
+```
+/newspaper today.pdf
+/newspaper today.pdf pages 1-8,12
+/newspaper today.pdf --skip-junk
+```
+
+The skill walks you through the entire manual workflow:
+1. Classify pages (if needed)
+2. Build summarization prompts
+3. Guide you through summarizing each chunk
+4. Load results into database
+5. Open interactive reading page
+
+**No API key required.** Cost: free (you provide the summaries).
+
+See [skills/README.md](skills/README.md) for full skill documentation.
+
+---
+
+## Running from Command Line
 
 There are **two ways to run it**:
 
