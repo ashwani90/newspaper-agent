@@ -208,6 +208,7 @@ def ingest_pdf(
     pages: str | None = None,
     skip_pages: str | None = None,
     skip_junk: bool = False,
+    include_layout: bool = True,
     progress: ProgressFn = _noop,
 ) -> IngestReport:
     """Read one newspaper PDF into the database, summarising as it goes.
