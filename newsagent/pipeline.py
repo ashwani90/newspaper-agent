@@ -232,7 +232,12 @@ def ingest_pdf(
             f"page selection: {_compact_pages(sorted(wanted))} "
             f"of {pdf_page_count(pdf)}"
         )
-    doc = extract_pdf(pdf, max_pages=limit, pages_wanted=wanted)
+    doc = extract_pdf(
+        pdf,
+        max_pages=limit,
+        pages_wanted=wanted,
+        include_layout=include_layout,
+    )
     report.skipped_by_selection = doc.skipped_by_selection
 
     if skip_junk:
@@ -617,7 +622,12 @@ def prepare_edition(
             f"page selection: {_compact_pages(sorted(wanted))} "
             f"of {pdf_page_count(pdf)}"
         )
-    doc = extract_pdf(pdf, max_pages=limit, pages_wanted=wanted)
+    doc = extract_pdf(
+        pdf,
+        max_pages=limit,
+        pages_wanted=wanted,
+        include_layout=include_layout,
+    )
     report.skipped_by_selection = doc.skipped_by_selection
 
     # Whether the PDF had readable text *before* any filtering, so that

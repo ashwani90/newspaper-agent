@@ -475,6 +475,7 @@ def extract_pdf(
     path: Path,
     max_pages: int = 0,
     pages_wanted: set[int] | None = None,
+    include_layout: bool = True,
 ) -> PdfDocument:
     """Extract page text.
 
@@ -500,7 +501,7 @@ def extract_pdf(
         for page_number in wanted:
             index = page_number - 1
             page = pdf.pages[index]
-            layout_text = page.extract_text(layout=True) or ""
+            layout_text = (page.extract_text(layout=True) or "") if include_layout else ""
             column_text = _column_ordered_text(page)
             best = max(len(layout_text.strip()), len(column_text.strip()))
             pages.append(

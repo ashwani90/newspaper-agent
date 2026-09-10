@@ -14,12 +14,30 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from starlette.types import Scope
 
 from .config import WEB_CONFIG
 from .database import init_db
 from .routers import articles
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+
+
+class NoCacheStaticFiles(StaticFiles):
+    """StaticFiles that always revalidates with the server.
+
+    Browsers are otherwise free to keep serving an old index.html/app.js/
+    style.css from disk cache indefinitely. Since these three files are
+    versioned together (an old app.js can reference elements a newer
+    index.html no longer has, or vice versa), a stale one silently breaking
+    the page is worse than the extra round trip this costs -- ETags still
+    make an unchanged file a fast 304, not a full re-download.
+    """
+
+    async def get_response(self, path: str, scope: Scope):
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache, must-revalidate"
+        return response
 
 
 @asynccontextmanager
@@ -47,4 +65,4 @@ def health() -> dict:
 
 
 # Mounted last so it does not shadow /api/* or /health.
-app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
+app.mount("/", NoCacheStaticFiles(directory=STATIC_DIR, html=True), name="static")
