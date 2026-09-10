@@ -26,9 +26,6 @@ from pathlib import Path
 
 import pdfplumber
 
-# A page with fewer than this many characters is treated as image-only.
-MIN_CHARS_FOR_TEXT_PAGE = 120
-
 
 @dataclass
 class PageText:
@@ -504,13 +501,22 @@ def extract_pdf(
             layout_text = (page.extract_text(layout=True) or "") if include_layout else ""
             column_text = _column_ordered_text(page)
             best = max(len(layout_text.strip()), len(column_text.strip()))
+            # Whether the page has a real text layer at all must not depend
+            # on include_layout, and must not be fooled by layout_text's
+            # whitespace padding (extract_text(layout=True) preserves visual
+            # position, so even a tiny ad can pad out to thousands of
+            # characters). page.chars is the raw, already-parsed character
+            # list pdfplumber built while opening the page -- reading its
+            # length is free and reflects genuine extractable content
+            # regardless of which rendering(s) were requested.
+            has_text_layer = len(page.chars) > 0
             pages.append(
                 PageText(
                     page_number=index + 1,
                     layout_text=layout_text,
                     column_text=column_text,
                     char_count=best,
-                    has_text_layer=best >= MIN_CHARS_FOR_TEXT_PAGE,
+                    has_text_layer=has_text_layer,
                 )
             )
 
