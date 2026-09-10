@@ -36,6 +36,11 @@
       <input id="dateTo" type="date" />
     </label>
 
+    <label class="checkbox-label">
+      <input id="unreadOnly" type="checkbox" />
+      Unread only
+    </label>
+
     <button id="clearFilters" class="secondary">Clear filters</button>
   </section>
 
@@ -48,13 +53,6 @@
     <span id="pageInfo"></span>
     <button id="nextPage" class="secondary">Next &raquo;</button>
   </footer>
-
-  <div id="modalBackdrop" class="modal-backdrop" hidden>
-    <div class="modal" id="modal">
-      <button id="modalClose" class="modal-close" aria-label="Close">&times;</button>
-      <div id="modalBody"></div>
-    </div>
-  </div>
 
   <script src="app.js"></script>
 </body>

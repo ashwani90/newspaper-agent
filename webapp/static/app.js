@@ -2,7 +2,7 @@ const API = "/api";
 
 const state = {
   page: 1,
-  pageSize: 20,
+  pageSize: 10,
   total: 0,
   filters: {
     newspaper: "",
@@ -11,6 +11,7 @@ const state = {
     date_from: "",
     date_to: "",
     q: "",
+    unread_only: false,
   },
 };
 
@@ -23,14 +24,11 @@ const els = {
   topic: document.getElementById("topic"),
   dateFrom: document.getElementById("dateFrom"),
   dateTo: document.getElementById("dateTo"),
+  unreadOnly: document.getElementById("unreadOnly"),
   clearFilters: document.getElementById("clearFilters"),
   prevPage: document.getElementById("prevPage"),
   nextPage: document.getElementById("nextPage"),
   pageInfo: document.getElementById("pageInfo"),
-  modalBackdrop: document.getElementById("modalBackdrop"),
-  modal: document.getElementById("modal"),
-  modalBody: document.getElementById("modalBody"),
-  modalClose: document.getElementById("modalClose"),
 };
 
 let searchDebounce = null;
@@ -38,13 +36,13 @@ let searchDebounce = null;
 function qs(params) {
   const usp = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
-    if (v !== "" && v !== null && v !== undefined) usp.set(k, v);
+    if (v !== "" && v !== null && v !== undefined && v !== false) usp.set(k, v);
   }
   return usp.toString();
 }
 
-async function fetchJSON(url) {
-  const res = await fetch(url);
+async function fetchJSON(url, options) {
+  const res = await fetch(url, options);
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json();
 }
@@ -94,9 +92,15 @@ function formatDate(iso) {
   });
 }
 
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str ?? "";
+  return div.innerHTML;
+}
+
 function renderCard(article) {
   const card = document.createElement("article");
-  card.className = "card";
+  card.className = "card" + (article.is_read ? " is-read" : "");
   card.dataset.id = article.id;
 
   const meta = document.createElement("div");
@@ -106,7 +110,13 @@ function renderCard(article) {
     <span>${formatDate(article.published_at)}</span>
     ${article.page_number ? `<span>p${article.page_number}</span>` : ""}
     ${article.byline ? `<span>${escapeHtml(article.byline)}</span>` : ""}
+    ${article.is_read ? '<span class="read-badge">Read</span>' : ""}
   `;
+  const markBtn = document.createElement("button");
+  markBtn.className = "mark-read-btn";
+  markBtn.textContent = article.is_read ? "Mark unread" : "Mark read";
+  markBtn.addEventListener("click", () => toggleRead(article.id, !article.is_read));
+  meta.appendChild(markBtn);
 
   const h3 = document.createElement("h3");
   h3.textContent = article.headline;
@@ -114,6 +124,28 @@ function renderCard(article) {
   const p = document.createElement("p");
   p.className = "summary";
   p.textContent = article.summary_text || "(no summary)";
+
+  const bullets = document.createElement("ul");
+  bullets.className = "bullets";
+  for (const b of article.bullets || []) {
+    const li = document.createElement("li");
+    li.textContent = b;
+    bullets.appendChild(li);
+  }
+
+  let why = null;
+  if (article.why_it_matters) {
+    why = document.createElement("p");
+    why.className = "why-matters";
+    why.innerHTML = `<em>Why it matters:</em> ${escapeHtml(article.why_it_matters)}`;
+  }
+
+  let entities = null;
+  if (article.entities && article.entities.length) {
+    entities = document.createElement("p");
+    entities.className = "entities";
+    entities.innerHTML = `<strong>Entities:</strong> ${escapeHtml(article.entities.join(", "))}`;
+  }
 
   const tagRow = document.createElement("div");
   tagRow.className = "tag-row";
@@ -130,18 +162,83 @@ function renderCard(article) {
     tagRow.appendChild(tag);
   }
 
+  const toggleBtn = document.createElement("button");
+  toggleBtn.className = "toggle-original secondary";
+  toggleBtn.textContent = "Show original article";
+  const originalBox = document.createElement("div");
+  originalBox.className = "original-text";
+  originalBox.hidden = true;
+  toggleBtn.addEventListener("click", () => toggleOriginal(article.id, toggleBtn, originalBox));
+
   card.appendChild(meta);
   card.appendChild(h3);
   card.appendChild(p);
+  if (bullets.childElementCount) card.appendChild(bullets);
+  if (why) card.appendChild(why);
+  if (entities) card.appendChild(entities);
   card.appendChild(tagRow);
-  card.addEventListener("click", () => openModal(article.id));
+  card.appendChild(toggleBtn);
+  card.appendChild(originalBox);
   return card;
 }
 
-function escapeHtml(str) {
-  const div = document.createElement("div");
-  div.textContent = str ?? "";
-  return div.innerHTML;
+async function toggleOriginal(id, button, box) {
+  if (!box.hidden) {
+    box.hidden = true;
+    button.textContent = "Show original article";
+    return;
+  }
+  if (!box.dataset.loaded) {
+    box.hidden = false;
+    box.classList.add("loading");
+    box.textContent = "Loading original text...";
+    try {
+      const article = await fetchJSON(`${API}/articles/${id}`);
+      box.textContent = article.original_text || "(no original text stored)";
+      box.dataset.loaded = "1";
+    } catch (err) {
+      box.textContent = `Failed to load original text: ${err.message}`;
+    }
+    box.classList.remove("loading");
+  } else {
+    box.hidden = false;
+  }
+  button.textContent = "Hide original article";
+}
+
+async function toggleRead(id, read) {
+  try {
+    await fetchJSON(`${API}/articles/${id}/read`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ read }),
+    });
+    if (state.filters.unread_only && read) {
+      // The card no longer belongs in an unread-only view -- drop it and
+      // reload so pagination counts stay correct.
+      loadArticles();
+    } else {
+      const card = els.list.querySelector(`[data-id="${id}"]`);
+      if (card) {
+        card.classList.toggle("is-read", read);
+        const btn = card.querySelector(".mark-read-btn");
+        if (btn) btn.textContent = read ? "Mark unread" : "Mark read";
+        const meta = card.querySelector(".card-meta");
+        let badge = meta.querySelector(".read-badge");
+        if (read && !badge) {
+          badge = document.createElement("span");
+          badge.className = "read-badge";
+          badge.textContent = "Read";
+          meta.insertBefore(badge, meta.querySelector(".mark-read-btn"));
+        } else if (!read && badge) {
+          badge.remove();
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Failed to update read status", err);
+    alert(`Could not update read status: ${err.message}`);
+  }
 }
 
 async function loadArticles() {
@@ -175,66 +272,6 @@ function updatePagination() {
   els.nextPage.disabled = state.page >= totalPages;
 }
 
-async function openModal(id) {
-  els.modalBody.innerHTML = "<p>Loading...</p>";
-  els.modalBackdrop.hidden = false;
-  try {
-    const a = await fetchJSON(`${API}/articles/${id}`);
-    const bullets = (a.bullets || [])
-      .map((b) => `<li>${escapeHtml(b)}</li>`)
-      .join("");
-    const entities = (a.entities || []).join(", ");
-    const topics = (a.topics || [])
-      .map(
-        (t) =>
-          `<span class="tag">${escapeHtml(t.topic)} ${(t.confidence * 100).toFixed(0)}%${
-            t.rationale ? ` &mdash; ${escapeHtml(t.rationale)}` : ""
-          }</span>`
-      )
-      .join(" ");
-
-    els.modalBody.innerHTML = `
-      <h2>${escapeHtml(a.headline)}</h2>
-      <div class="modal-meta">
-        <strong>${escapeHtml(a.newspaper_name)}</strong>
-        &middot; ${formatDate(a.published_at)}
-        ${a.page_number ? `&middot; page ${a.page_number}` : ""}
-        ${a.byline ? `&middot; ${escapeHtml(a.byline)}` : ""}
-        ${a.category ? `&middot; <span class="tag category">${escapeHtml(a.category)}</span>` : ""}
-      </div>
-
-      <section>
-        <h4>Summary</h4>
-        <p>${escapeHtml(a.summary_text || "(no summary)")}</p>
-        ${bullets ? `<ul>${bullets}</ul>` : ""}
-        ${a.why_it_matters ? `<p><em>Why it matters:</em> ${escapeHtml(a.why_it_matters)}</p>` : ""}
-      </section>
-
-      ${entities ? `<section><h4>Entities</h4><p>${escapeHtml(entities)}</p></section>` : ""}
-      ${topics ? `<section><h4>Topics</h4><div class="tag-row">${topics}</div></section>` : ""}
-
-      <section>
-        <h4>Original article</h4>
-        <button id="toggleOriginal" class="toggle-original">Show full text</button>
-        <div class="original-text" id="originalText" hidden>${escapeHtml(a.original_text)}</div>
-      </section>
-    `;
-
-    document.getElementById("toggleOriginal").addEventListener("click", (e) => {
-      const box = document.getElementById("originalText");
-      box.hidden = !box.hidden;
-      e.target.textContent = box.hidden ? "Show full text" : "Hide full text";
-    });
-  } catch (err) {
-    els.modalBody.innerHTML = `<p>Failed to load article: ${escapeHtml(err.message)}</p>`;
-  }
-}
-
-function closeModal() {
-  els.modalBackdrop.hidden = true;
-  els.modalBody.innerHTML = "";
-}
-
 function applyFiltersFromInputs() {
   state.filters = {
     newspaper: els.newspaper.value,
@@ -243,6 +280,7 @@ function applyFiltersFromInputs() {
     date_from: els.dateFrom.value,
     date_to: els.dateTo.value,
     q: els.search.value.trim(),
+    unread_only: els.unreadOnly.checked,
   };
   state.page = 1;
   loadArticles();
@@ -257,6 +295,7 @@ els.category.addEventListener("change", applyFiltersFromInputs);
 els.topic.addEventListener("change", applyFiltersFromInputs);
 els.dateFrom.addEventListener("change", applyFiltersFromInputs);
 els.dateTo.addEventListener("change", applyFiltersFromInputs);
+els.unreadOnly.addEventListener("change", applyFiltersFromInputs);
 
 els.clearFilters.addEventListener("click", () => {
   els.search.value = "";
@@ -265,6 +304,7 @@ els.clearFilters.addEventListener("click", () => {
   els.topic.value = "";
   els.dateFrom.value = "";
   els.dateTo.value = "";
+  els.unreadOnly.checked = false;
   applyFiltersFromInputs();
 });
 
@@ -282,12 +322,7 @@ els.nextPage.addEventListener("click", () => {
   }
 });
 
-els.modalClose.addEventListener("click", closeModal);
-els.modalBackdrop.addEventListener("click", (e) => {
-  if (e.target === els.modalBackdrop) closeModal();
-});
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") closeModal();
   if (e.key === "/" && document.activeElement !== els.search) {
     e.preventDefault();
     els.search.focus();

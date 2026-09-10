@@ -10,7 +10,8 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from .config import WEB_CONFIG
@@ -23,21 +24,47 @@ class Base(DeclarativeBase):
 _engine = create_engine(WEB_CONFIG.database_url, future=True, pool_pre_ping=True)
 SessionLocal = sessionmaker(bind=_engine, future=True, expire_on_commit=False)
 
+# Columns added after a table already existed in someone's database.
+# create_all() only creates missing *tables*, not missing columns on an
+# existing one, so each entry here is applied with an idempotent ALTER TABLE
+# on every startup instead. This is a stopgap for the lack of Alembic --
+# fine for additive, nullable columns; a real schema change still needs a
+# proper migration.
+_ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
+    # (table, column, DDL type)
+    ("articles", "read_at", "TIMESTAMP NULL"),
+]
+
 
 def get_engine():
     return _engine
+
+
+def _ensure_additive_columns(engine: Engine) -> None:
+    inspector = inspect(engine)
+    existing_tables = set(inspector.get_table_names())
+    for table, column, ddl_type in _ADDITIVE_COLUMNS:
+        if table not in existing_tables:
+            continue  # create_all() just made it fresh, with every column
+        columns = {col["name"] for col in inspector.get_columns(table)}
+        if column in columns:
+            continue
+        with engine.begin() as conn:
+            conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl_type}"))
 
 
 def init_db() -> None:
     """Create all tables if they do not already exist.
 
     Safe to call on every startup -- create_all is a no-op for tables that
-    already exist. Schema changes still need a manual migration or a
-    drop/recreate; there is no Alembic setup yet.
+    already exist, and _ensure_additive_columns() only adds a column when
+    it's missing. Anything beyond an additive nullable column still needs a
+    manual migration or a drop/recreate; there is no Alembic setup yet.
     """
     from . import models  # noqa: F401  (import registers the model classes)
 
     Base.metadata.create_all(_engine)
+    _ensure_additive_columns(_engine)
 
 
 def get_db() -> Iterator[Session]:

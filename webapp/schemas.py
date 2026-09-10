@@ -73,12 +73,18 @@ class ArticleOut(BaseModel):
     why_it_matters: str | None
     read_minutes: int
     published_at: datetime | None
+    read_at: datetime | None = None
+    is_read: bool = False
     topics: list[TopicTagOut] = Field(default_factory=list)
 
 
 class ArticleDetailOut(ArticleOut):
     original_text: str
     body_source: str | None
+
+
+class ArticleReadUpdate(BaseModel):
+    read: bool
 
 
 class ArticleListResponse(BaseModel):

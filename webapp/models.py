@@ -91,6 +91,11 @@ class Article(Base):
     published_at: Mapped[datetime | None] = mapped_column(
         DateTime, nullable=True, index=True
     )
+    # NULL = unread. Set to the time it was marked read; cleared to mark
+    # unread again. Indexed because "unread only" is a common list filter.
+    read_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()

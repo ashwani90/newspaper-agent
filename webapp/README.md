@@ -119,6 +119,7 @@ Each article row carries every field the browser UI filters or displays on:
 | `POST /api/articles/bulk` | Ingest one edition's articles (used by `push-web`) |
 | `GET /api/articles` | Filterable, paginated article list |
 | `GET /api/articles/{id}` | One article, including full `original_text` |
+| `PATCH /api/articles/{id}/read` | Mark one article read or unread |
 | `GET /api/newspapers` | Distinct newspapers with article counts |
 | `GET /api/categories` | Distinct categories with article counts |
 | `GET /api/topics` | Distinct topics with article counts |
@@ -133,18 +134,43 @@ Each article row carries every field the browser UI filters or displays on:
 - `topic` — exact match on topic name
 - `date_from`, `date_to` — ISO dates, inclusive
 - `q` — search across headline, summary, and original text
-- `page`, `page_size` — pagination (default 20, max 200)
+- `unread_only` — `true` to only return articles not yet marked read
+- `page`, `page_size` — pagination (default 10 in the UI, 20 via the API directly, max 200)
 
 ```bash
 curl "http://localhost:8000/api/articles?category=Technology&date_from=2026-09-01&q=AI"
+curl "http://localhost:8000/api/articles?unread_only=true"
 ```
+
+### Marking an article read / unread
+
+```bash
+curl -X PATCH "http://localhost:8000/api/articles/42/read" \
+  -H "Content-Type: application/json" -d '{"read": true}'
+```
+
+Setting `read` to `false` clears it back to unread. The browser UI does
+this with a "Mark read" / "Mark unread" button on every article, and the
+"Unread only" checkbox in the filter bar calls the same `unread_only` query
+param above.
+
+## Reading the articles in the browser
+
+The card for every article shows its **full summary inline** — the
+one-liner, every bullet, why it matters, and entities — with no click
+required to see it. Only the original full article text is collapsed by
+default (it's what was actually printed, often several hundred words); a
+"Show original article" button on each card expands it in place, fetching
+it lazily so the list itself stays light to load.
 
 ## Known limits
 
-- **No migrations yet.** Schema changes are applied with `create_all` on
-  startup, which only adds missing tables — it will not alter an existing
-  table's columns. A real schema change needs a manual `ALTER TABLE` or a
-  drop/recreate of the affected table.
+- **No real migration tool yet.** Table creation still relies on
+  `create_all`, which only adds missing *tables*. Additive, nullable
+  columns (like `read_at`) are backfilled with an idempotent `ALTER TABLE`
+  in `webapp/database.py:_ensure_additive_columns` on every startup, which
+  covers the common case, but a genuine schema change (renaming/dropping a
+  column, changing a type) still needs a manual migration.
 - **`push-web` is a separate, explicit step.** It is not wired into
   `newsagent load` automatically, so the local SQLite-based reading
   commands (`digest`, `html`, `search`, `article`) keep working exactly as

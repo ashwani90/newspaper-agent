@@ -1,11 +1,12 @@
 """Article and newspaper API endpoints.
 
-    POST /api/articles/bulk    ingest one edition's worth of articles
-    GET  /api/articles         filterable, paginated article list
-    GET  /api/articles/{id}    one article, full original text included
-    GET  /api/newspapers       distinct newspapers with article counts
-    GET  /api/categories       distinct categories with article counts
-    GET  /api/topics           distinct topics with article counts
+    POST  /api/articles/bulk        ingest one edition's worth of articles
+    GET   /api/articles             filterable, paginated article list
+    GET   /api/articles/{id}        one article, full original text included
+    PATCH /api/articles/{id}/read   mark an article read or unread
+    GET   /api/newspapers           distinct newspapers with article counts
+    GET   /api/categories           distinct categories with article counts
+    GET   /api/topics               distinct topics with article counts
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ from ..schemas import (
     ArticleDetailOut,
     ArticleListResponse,
     ArticleOut,
+    ArticleReadUpdate,
     BulkIngestRequest,
     BulkIngestResponse,
     CategoryOut,
@@ -50,6 +52,8 @@ def _to_article_out(article: Article) -> ArticleOut:
         why_it_matters=article.why_it_matters,
         read_minutes=article.read_minutes,
         published_at=article.published_at,
+        read_at=article.read_at,
+        is_read=article.read_at is not None,
         topics=[
             TopicTagOut(
                 topic=link.topic.name,
@@ -180,6 +184,7 @@ def list_articles(
     date_from: date | None = Query(None, description="Published on or after this date"),
     date_to: date | None = Query(None, description="Published on or before this date"),
     q: str | None = Query(None, description="Search headline, summary, and body text"),
+    unread_only: bool = Query(False, description="Only articles not yet marked read"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=200),
     db: Session = Depends(get_db),
@@ -217,6 +222,8 @@ def list_articles(
                 Article.original_text.ilike(like),
             )
         )
+    if unread_only:
+        stmt = stmt.where(Article.read_at.is_(None))
 
     count_stmt = select(func.count()).select_from(stmt.with_only_columns(Article.id).subquery())
     total = db.scalar(count_stmt) or 0
@@ -254,6 +261,27 @@ def get_article(article_id: int, db: Session = Depends(get_db)) -> ArticleDetail
         original_text=article.original_text,
         body_source=article.body_source,
     )
+
+
+@router.patch("/articles/{article_id}/read", response_model=ArticleOut)
+def set_read_status(
+    article_id: int, payload: ArticleReadUpdate, db: Session = Depends(get_db)
+) -> ArticleOut:
+    """Mark one article read (payload.read=true) or unread (false)."""
+    article = db.scalar(
+        select(Article)
+        .options(
+            selectinload(Article.newspaper),
+            selectinload(Article.topic_links).selectinload(ArticleTopic.topic),
+        )
+        .where(Article.id == article_id)
+    )
+    if article is None:
+        raise HTTPException(status_code=404, detail="Article not found")
+    article.read_at = datetime.utcnow() if payload.read else None
+    db.commit()
+    db.refresh(article)
+    return _to_article_out(article)
 
 
 @router.get("/newspapers", response_model=list[NewspaperOut])
