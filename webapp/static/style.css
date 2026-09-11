@@ -81,31 +81,56 @@ body {
 /* ---- Masthead ------------------------------------------------------------ */
 
 .masthead {
-  padding: 56px 24px 32px;
-  max-width: 760px;
-  margin: 0 auto;
-  text-align: center;
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 24px;
+  background: rgba(249, 245, 238, 0.86);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.masthead-brand {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
 }
 
 .masthead h1 {
   font-family: var(--font-display);
   font-weight: 600;
-  font-size: clamp(2.6rem, 6vw, 4.2rem);
-  letter-spacing: -0.02em;
+  font-size: 19px;
+  letter-spacing: -0.01em;
   line-height: 1;
-  margin: 18px 0 10px;
+  margin: 0;
+}
+
+.masthead .eyebrow--muted {
+  font-size: 10px;
 }
 
 .stats {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+@media (max-width: 560px) {
+  .masthead .eyebrow--muted {
+    display: none;
+  }
 }
 
 /* ---- Layout: sidebar + reading pane --------------------------------------- */
 
 .layout {
   max-width: 1240px;
-  margin: 0 auto;
+  margin: 20px auto 0;
   padding: 0 24px;
   display: flex;
   align-items: flex-start;
@@ -115,7 +140,7 @@ body {
 .sidebar {
   flex: 0 0 clamp(210px, 19vw, 270px);
   position: sticky;
-  top: 24px;
+  top: 68px;
 }
 
 /* ---- Filters (sidebar contents) -------------------------------------------- */
