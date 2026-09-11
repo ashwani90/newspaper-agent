@@ -61,7 +61,7 @@ class PdfDocument:
     path: Path
     page_count: int
     pages: list[PageText]
-    source_name: str | None
+    source_name: str
     edition_date: date | None
     selected: set[int] | None = None
     skipped_by_selection: list[int] = field(default_factory=list)
@@ -454,20 +454,6 @@ def guess_edition_date(first_page_text: str) -> date | None:
     return None
 
 
-def guess_source_name(first_page_text: str) -> str | None:
-    """Guess the paper's name from the first non-trivial masthead line."""
-    for raw in first_page_text.splitlines():
-        line = raw.strip()
-        if len(line) < 4 or len(line) > 60:
-            continue
-        if sum(c.isdigit() for c in line) > len(line) / 3:
-            continue
-        if "[COLUMN BREAK]" in line or line.startswith("==="):
-            continue
-        return line
-    return None
-
-
 def extract_pdf(
     path: Path,
     max_pages: int = 0,
@@ -525,7 +511,7 @@ def extract_pdf(
         path=path,
         page_count=total,
         pages=pages,
-        source_name=guess_source_name(first_text),
+        source_name=path.stem,
         edition_date=guess_edition_date(first_text),
         selected=set(pages_wanted) if pages_wanted else None,
         skipped_by_selection=skipped_by_selection,

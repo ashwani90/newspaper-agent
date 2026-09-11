@@ -59,7 +59,7 @@ def main() -> int:
           f"got {len(doc.pages)}")
     check("every selected page has a text layer", not doc.image_only_pages,
           str(doc.image_only_pages))
-    check("masthead source detected", doc.source_name == "THE MORNING CHRONICLE", repr(doc.source_name))
+    check("source name is the pdf filename", doc.source_name == pdf.stem, repr(doc.source_name))
     check("masthead date detected", str(doc.edition_date) == "2026-03-12", str(doc.edition_date))
     check(
         "columns read in order (headline intact)",

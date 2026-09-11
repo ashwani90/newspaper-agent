@@ -97,6 +97,12 @@ def bulk_ingest(payload: BulkIngestRequest, db: Session = Depends(get_db)):
         )
         db.add(newspaper)
         db.flush()
+    else:
+        # The pushed name is always the current source of truth (the PDF
+        # filename) -- keep a previously-created record's name in sync
+        # rather than leaving a stale guess from an earlier push.
+        newspaper.name = np_data.name
+        newspaper.source_file = np_data.source_file
 
     published_at = (
         datetime.combine(np_data.edition_date, datetime.min.time())

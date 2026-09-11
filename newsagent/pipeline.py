@@ -179,7 +179,7 @@ def _upsert_edition(
     edition = find_edition_by_hash(session, sha)
     if edition is None:
         edition = Edition(
-            source_name=doc.source_name or pdf.stem,
+            source_name=doc.source_name,
             edition_date=doc.edition_date,
             pdf_path=str(pdf.resolve()),
             pdf_sha256=sha,
