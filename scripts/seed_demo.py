@@ -1,9 +1,9 @@
-"""Populate a database with stub summaries, with no API calls.
+"""Populate the database with stub summaries, with no API calls.
 
 Lets you see exactly what the CLI output looks like before spending anything
 on real summarisation. Point it at a throwaway database:
 
-    NEWSAGENT_DB=data/_demo.db python scripts/seed_demo.py
+    POSTGRES_DB=newspaper_agent_demo python scripts/seed_demo.py
 
 The summaries it writes are placeholders, not real model output.
 """
@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tests"))
 
 from newsagent import pipeline  # noqa: E402
-from newsagent.config import CONFIG  # noqa: E402
+from webapp.config import WEB_CONFIG  # noqa: E402
 
 
 def main() -> int:
@@ -34,7 +34,7 @@ def main() -> int:
 
     report = pipeline.ingest_pdf(pdf, force=True)
     print("\n".join(report.as_lines()))
-    print(f"\nseeded into {CONFIG.db_path}")
+    print(f"\nseeded into postgresql://{WEB_CONFIG.postgres_host}:{WEB_CONFIG.postgres_port}/{WEB_CONFIG.postgres_db}")
     return 0
 
 

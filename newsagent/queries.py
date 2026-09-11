@@ -10,14 +10,13 @@ import re
 from datetime import date, timedelta
 from typing import Any
 
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
-from .db import Article, ArticleTopic, Edition, Summary, Topic, session_scope
+from .db import Article, ArticleTopic, Edition, Topic, session_scope
 
 
 def _article_dict(article: Article, *, include_body: bool = False) -> dict[str, Any]:
-    summary = article.summary
     tags = sorted(
         (
             {
@@ -37,36 +36,35 @@ def _article_dict(article: Article, *, include_body: bool = False) -> dict[str, 
         "section": article.section,
         "page": article.page_number,
         "word_count": article.word_count,
-        "source": article.edition.source_name if article.edition else None,
+        "source": article.newspaper.name if article.newspaper else None,
         "edition_date": (
-            article.edition.edition_date.isoformat()
-            if article.edition and article.edition.edition_date
+            article.newspaper.edition_date.isoformat()
+            if article.newspaper and article.newspaper.edition_date
             else None
         ),
         "topics": tags,
         "body_source": article.body_source,
     }
-    if summary is not None:
+    if article.summary_text is not None:
         data["summary"] = {
-            "one_liner": summary.one_liner,
-            "bullets": summary.bullets,
-            "why_it_matters": summary.why_it_matters,
-            "entities": summary.entities,
-            "category": summary.category,
-            "read_minutes": summary.read_minutes,
+            "one_liner": article.summary_text,
+            "bullets": article.bullets or [],
+            "why_it_matters": article.why_it_matters,
+            "entities": article.entities or [],
+            "category": article.category,
+            "read_minutes": article.read_minutes,
         }
     else:
         data["summary"] = None
     if include_body:
-        data["body_text"] = article.body_text
+        data["body_text"] = article.original_text
     return data
 
 
 def _loaded(stmt):  # noqa: ANN001, ANN201
     return stmt.options(
-        selectinload(Article.summary),
         selectinload(Article.topic_links).selectinload(ArticleTopic.topic),
-        selectinload(Article.edition),
+        selectinload(Article.newspaper),
     )
 
 
@@ -95,12 +93,12 @@ def _apply_filters(stmt, *, topic: str | None, since: str | None, source: str | 
             .where(func.lower(Topic.name) == topic.strip().lower())
         )
     if since or source:
-        stmt = stmt.join(Edition, Edition.id == Article.edition_id)
+        stmt = stmt.join(Edition, Edition.id == Article.newspaper_id)
         cutoff = _parse_since(since)
         if cutoff is not None:
             stmt = stmt.where(Edition.edition_date >= cutoff)
         if source:
-            stmt = stmt.where(Edition.source_name.ilike(f"%{source}%"))
+            stmt = stmt.where(Edition.name.ilike(f"%{source}%"))
     return stmt
 
 
@@ -149,13 +147,10 @@ def articles_by_topic(
         )
         cutoff = _parse_since(since)
         if cutoff is not None:
-            stmt = stmt.join(Edition, Edition.id == Article.edition_id).where(
+            stmt = stmt.join(Edition, Edition.id == Article.newspaper_id).where(
                 Edition.edition_date >= cutoff
             )
         return [_article_dict(a) for a in session.scalars(stmt).unique().all()]
-
-
-_FTS_SPECIALS = re.compile(r'[":*^(){}\[\]-]')
 
 
 def search_articles(
@@ -168,23 +163,20 @@ def search_articles(
 ) -> list[dict[str, Any]]:
     """Full-text search over headlines, bodies, and summaries.
 
-    Plain words are ANDed. FTS5 operator characters in the query are stripped
-    so a user's punctuation can never produce a syntax error.
+    Plain words are ANDed (plainto_tsquery), ranked by Postgres's ts_rank
+    over each article's generated search_vector column.
     """
-    cleaned = _FTS_SPECIALS.sub(" ", query or "").strip()
+    cleaned = (query or "").strip()
     if not cleaned:
         return []
-    terms = [f'"{word}"' for word in cleaned.split() if word]
-    match_expr = " AND ".join(terms)
 
     with session_scope() as session:
+        tsquery = func.plainto_tsquery("english", cleaned)
         rows = session.execute(
-            text(
-                "SELECT article_id, bm25(articles_fts, 8.0, 1.0, 4.0) AS score "
-                "FROM articles_fts WHERE articles_fts MATCH :q "
-                "ORDER BY score LIMIT :lim"
-            ),
-            {"q": match_expr, "lim": max(limit * 4, limit)},
+            select(Article.id, func.ts_rank(Article.search_vector, tsquery).label("score"))
+            .where(Article.search_vector.op("@@")(tsquery))
+            .order_by(func.ts_rank(Article.search_vector, tsquery).desc())
+            .limit(max(limit * 4, limit))
         ).all()
         if not rows:
             return []
@@ -197,7 +189,7 @@ def search_articles(
             source=source,
         )
         found = session.scalars(stmt).unique().all()
-        found.sort(key=lambda a: ranked.get(a.id, 0.0))
+        found.sort(key=lambda a: -ranked.get(a.id, 0.0))
         return [_article_dict(a) for a in found[:limit]]
 
 
@@ -216,7 +208,7 @@ def digest(
     """
     with session_scope() as session:
         stmt = _apply_filters(
-            _loaded(select(Article)).join(Summary, Summary.article_id == Article.id),
+            _loaded(select(Article)).where(Article.summary_text.is_not(None)),
             topic=None,
             since=since,
             source=source,
@@ -267,22 +259,22 @@ def list_editions(limit: int = 25) -> list[dict[str, Any]]:
     with session_scope() as session:
         rows = session.execute(
             select(Edition, func.count(Article.id))
-            .outerjoin(Article, Article.edition_id == Edition.id)
+            .outerjoin(Article, Article.newspaper_id == Edition.id)
             .group_by(Edition.id)
-            .order_by(Edition.ingested_at.desc())
+            .order_by(Edition.created_at.desc())
             .limit(limit)
         ).all()
         return [
             {
                 "edition_id": e.id,
-                "source": e.source_name,
+                "source": e.name,
                 "edition_date": e.edition_date.isoformat() if e.edition_date else None,
                 "pages": e.page_count,
                 "articles": count,
                 "status": e.status,
                 "note": e.note,
                 "pdf": e.pdf_path,
-                "ingested_at": e.ingested_at.isoformat(timespec="seconds"),
+                "ingested_at": e.created_at.isoformat(timespec="seconds"),
             }
             for e, count in rows
         ]
@@ -306,8 +298,7 @@ def stats() -> dict[str, Any]:
             session.scalar(
                 select(func.count())
                 .select_from(Article)
-                .outerjoin(Summary, Summary.article_id == Article.id)
-                .where(Summary.id.is_(None))
+                .where(Article.summary_text.is_(None))
             )
             or 0
         )
@@ -334,14 +325,14 @@ def export_articles(
         # joining the same table twice makes every column reference ambiguous.
         stmt = _loaded(select(Article))
         if summarised_only:
-            stmt = stmt.join(Summary, Summary.article_id == Article.id)
-        stmt = stmt.join(Edition, Edition.id == Article.edition_id)
+            stmt = stmt.where(Article.summary_text.is_not(None))
+        stmt = stmt.join(Edition, Edition.id == Article.newspaper_id)
 
         cutoff = _parse_since(since)
         if cutoff is not None:
             stmt = stmt.where(Edition.edition_date >= cutoff)
         if source:
-            stmt = stmt.where(Edition.source_name.ilike(f"%{source}%"))
+            stmt = stmt.where(Edition.name.ilike(f"%{source}%"))
 
         stmt = stmt.order_by(
             Edition.edition_date.desc().nulls_last(),
@@ -360,43 +351,12 @@ def export_articles(
         return out
 
 
-def export_articles_by_edition(
-    edition_id: int, *, include_body: bool = True
-) -> dict[str, Any] | None:
-    """One edition's metadata plus every one of its articles as plain dicts.
-
-    Used by 'newsagent push-web' to send a single edition to the webapp API.
-    Returns None if the edition does not exist.
-    """
-    with session_scope() as session:
-        edition = session.get(Edition, edition_id)
-        if edition is None:
-            return None
-        stmt = _loaded(select(Article).where(Article.edition_id == edition_id)).order_by(
-            Article.page_number, Article.id
-        )
-        articles = session.scalars(stmt).unique().all()
-        return {
-            "edition_id": edition.id,
-            "source_name": edition.source_name,
-            "edition_date": edition.edition_date.isoformat()
-            if edition.edition_date
-            else None,
-            "pdf_path": edition.pdf_path,
-            "pdf_sha256": edition.pdf_sha256,
-            "articles": [
-                _article_dict(a, include_body=include_body) for a in articles
-            ],
-        }
-
-
 def unsummarised_article_ids(limit: int = 500) -> list[int]:
     with session_scope() as session:
         return list(
             session.scalars(
                 select(Article.id)
-                .outerjoin(Summary, Summary.article_id == Article.id)
-                .where(Summary.id.is_(None))
+                .where(Article.summary_text.is_(None))
                 .order_by(Article.id)
                 .limit(limit)
             ).all()

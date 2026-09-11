@@ -4,13 +4,10 @@ langgraph>=1.2,<2
 pypdf>=6.0
 pdfplumber>=0.11
 SQLAlchemy>=2.0
+psycopg2-binary>=2.9    # CLI and webapp both talk to PostgreSQL directly
 python-dotenv>=1.0
 rich>=15.0
 reportlab>=5.0          # only used by scripts/make_sample_pdf.py
-requests>=2.31          # CLI -> webapp API (push-web)
-
-# --- webapp/ (PostgreSQL-backed API + browser UI) ---
 fastapi>=0.115
 uvicorn[standard]>=0.32
-psycopg2-binary>=2.9
 pydantic>=2.9

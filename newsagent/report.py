@@ -17,6 +17,7 @@ from typing import Any
 
 from . import queries
 from .config import CONFIG
+from webapp.config import WEB_CONFIG
 
 # A closing script tag inside embedded JSON would end the <script> block
 # early, so the three characters that could start markup are escaped. This is
@@ -423,9 +424,9 @@ def build_report(
         )
 
     payload = {
-        # Read/unread state is namespaced per database, so two libraries on
-        # one machine do not overwrite each other's progress.
-        "db_key": CONFIG.db_path.stem,
+        # Read/unread state's localStorage namespace. There is one shared
+        # Postgres database now (no per-file SQLite library to key by).
+        "db_key": "newsagent",
         "articles": articles,
     }
 
@@ -466,7 +467,7 @@ def build_report(
 <div id="list"></div>
 
 <footer>
-  Generated {html.escape(generated)} from {html.escape(str(CONFIG.db_path))}
+  Generated {html.escape(generated)} from PostgreSQL ({html.escape(WEB_CONFIG.postgres_db)})
   &middot; window: {html.escape(str(window))}<br>
   Snapshot, not live &mdash; run <code>newsagent html</code> again after loading a new paper.
 </footer>

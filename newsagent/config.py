@@ -24,17 +24,11 @@ class Config:
     model: str
     segment_model: str
     effort: str
-    db_path: Path
     topics_file: Path
     inbox: Path
     prompts_dir: Path
     reports_dir: Path
     max_pages: int
-    webapp_api_url: str | None
-
-    @property
-    def db_url(self) -> str:
-        return f"sqlite+pysqlite:///{self.db_path}"
 
 
 def load_config() -> Config:
@@ -45,15 +39,12 @@ def load_config() -> Config:
             "NEWSAGENT_SEGMENT_MODEL", os.getenv("NEWSAGENT_MODEL", "claude-opus-5")
         ),
         effort=os.getenv("NEWSAGENT_EFFORT", "medium"),
-        db_path=_resolve(os.getenv("NEWSAGENT_DB", "data/articles.db")),
         topics_file=_resolve(os.getenv("NEWSAGENT_TOPICS_FILE", "topics.txt")),
         inbox=_resolve(os.getenv("NEWSAGENT_INBOX", "inbox")),
         prompts_dir=_resolve(os.getenv("NEWSAGENT_PROMPTS", "prompts")),
         reports_dir=_resolve(os.getenv("NEWSAGENT_REPORTS", "reports")),
         max_pages=int(os.getenv("NEWSAGENT_MAX_PAGES", "0")),
-        webapp_api_url=os.getenv("NEWSAGENT_API_URL") or None,
     )
-    cfg.db_path.parent.mkdir(parents=True, exist_ok=True)
     cfg.inbox.mkdir(parents=True, exist_ok=True)
     cfg.prompts_dir.mkdir(parents=True, exist_ok=True)
     cfg.reports_dir.mkdir(parents=True, exist_ok=True)

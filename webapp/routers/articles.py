@@ -1,12 +1,14 @@
 """Article and newspaper API endpoints.
 
-    POST  /api/articles/bulk        ingest one edition's worth of articles
-    GET   /api/articles             filterable, paginated article list
-    GET   /api/articles/{id}        one article, full original text included
-    PATCH /api/articles/{id}/read   mark an article read or unread
-    GET   /api/newspapers           distinct newspapers with article counts
-    GET   /api/categories           distinct categories with article counts
-    GET   /api/topics               distinct topics with article counts
+    POST  /api/articles/bulk          ingest one edition's worth of articles
+    GET   /api/articles               filterable, paginated article list
+    GET   /api/articles/{id}          one article, full original text included
+    PATCH /api/articles/{id}/read     mark an article read or unread
+    PATCH /api/articles/{id}/category set (or clear) an article's category
+    PATCH /api/articles/{id}/topics   replace an article's topic tags
+    GET   /api/newspapers             distinct newspapers with article counts
+    GET   /api/categories             distinct categories with article counts
+    GET   /api/topics                 distinct topics with article counts
 """
 
 from __future__ import annotations
@@ -20,10 +22,12 @@ from sqlalchemy.orm import Session, selectinload
 from ..database import get_db
 from ..models import Article, ArticleTopic, Newspaper, Topic
 from ..schemas import (
+    ArticleCategoryUpdate,
     ArticleDetailOut,
     ArticleListResponse,
     ArticleOut,
     ArticleReadUpdate,
+    ArticleTopicsUpdate,
     BulkIngestRequest,
     BulkIngestResponse,
     CategoryOut,
@@ -33,6 +37,18 @@ from ..schemas import (
 )
 
 router = APIRouter(prefix="/api", tags=["articles"])
+
+
+def _get_or_create_topic(db: Session, cache: dict[str, Topic], name: str) -> Topic:
+    """Look up a topic by casefolded name, creating it if it doesn't exist yet."""
+    key = name.casefold()
+    topic = cache.get(key)
+    if topic is None:
+        topic = Topic(name=name)
+        db.add(topic)
+        db.flush()
+        cache[key] = topic
+    return topic
 
 
 def _to_article_out(article: Article) -> ArticleOut:
@@ -72,8 +88,8 @@ def bulk_ingest(payload: BulkIngestRequest, db: Session = Depends(get_db)):
     Matched on file_hash (or newspaper name + edition_date) for the edition,
     and on (newspaper, page_number, headline) for each article -- so
     re-pushing the same edition updates articles in place rather than
-    duplicating them. The CLI's 'push-web' command relies on this to be
-    safely re-runnable.
+    duplicating them. Not used by the CLI (newsagent writes to this same
+    database directly); kept as a general bulk-import API.
     """
     np_data = payload.newspaper
     newspaper = None
@@ -149,13 +165,7 @@ def bulk_ingest(payload: BulkIngestRequest, db: Session = Depends(get_db)):
 
         db.query(ArticleTopic).filter(ArticleTopic.article_id == row.id).delete()
         for tag in item.topics:
-            key = tag.topic.strip().casefold()
-            topic = topic_cache.get(key)
-            if topic is None:
-                topic = Topic(name=tag.topic.strip())
-                db.add(topic)
-                db.flush()
-                topic_cache[key] = topic
+            topic = _get_or_create_topic(db, topic_cache, tag.topic.strip())
             db.add(
                 ArticleTopic(
                     article_id=row.id,
@@ -285,6 +295,75 @@ def set_read_status(
     if article is None:
         raise HTTPException(status_code=404, detail="Article not found")
     article.read_at = datetime.utcnow() if payload.read else None
+    db.commit()
+    db.refresh(article)
+    return _to_article_out(article)
+
+
+@router.patch("/articles/{article_id}/category", response_model=ArticleOut)
+def set_category(
+    article_id: int, payload: ArticleCategoryUpdate, db: Session = Depends(get_db)
+) -> ArticleOut:
+    """Set or clear one article's category."""
+    article = db.scalar(
+        select(Article)
+        .options(
+            selectinload(Article.newspaper),
+            selectinload(Article.topic_links).selectinload(ArticleTopic.topic),
+        )
+        .where(Article.id == article_id)
+    )
+    if article is None:
+        raise HTTPException(status_code=404, detail="Article not found")
+    category = (payload.category or "").strip()
+    article.category = category or None
+    db.commit()
+    db.refresh(article)
+    return _to_article_out(article)
+
+
+@router.patch("/articles/{article_id}/topics", response_model=ArticleOut)
+def set_topics(
+    article_id: int, payload: ArticleTopicsUpdate, db: Session = Depends(get_db)
+) -> ArticleOut:
+    """Replace one article's topic tags, creating any new topic by name."""
+    article = db.scalar(
+        select(Article)
+        .options(
+            selectinload(Article.newspaper),
+            selectinload(Article.topic_links).selectinload(ArticleTopic.topic),
+        )
+        .where(Article.id == article_id)
+    )
+    if article is None:
+        raise HTTPException(status_code=404, detail="Article not found")
+
+    names: list[str] = []
+    seen: set[str] = set()
+    for raw_name in payload.topics:
+        name = raw_name.strip()
+        key = name.casefold()
+        if not name or key in seen:
+            continue
+        seen.add(key)
+        names.append(name)
+
+    topic_cache: dict[str, Topic] = {
+        t.name.casefold(): t for t in db.scalars(select(Topic)).all()
+    }
+    db.query(ArticleTopic).filter(ArticleTopic.article_id == article.id).delete()
+    for name in names:
+        topic = _get_or_create_topic(db, topic_cache, name)
+        db.add(
+            ArticleTopic(
+                article_id=article.id,
+                topic_id=topic.id,
+                confidence=1.0,
+                matched_by="manual",
+                rationale="Manually added",
+            )
+        )
+
     db.commit()
     db.refresh(article)
     return _to_article_out(article)

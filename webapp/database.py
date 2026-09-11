@@ -33,6 +33,25 @@ SessionLocal = sessionmaker(bind=_engine, future=True, expire_on_commit=False)
 _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
     # (table, column, DDL type)
     ("articles", "read_at", "TIMESTAMP NULL"),
+    # Added when the CLI (newsagent) moved from its own SQLite store onto
+    # this database directly -- see newsagent/db.py.
+    ("newspapers", "pdf_path", "TEXT NULL"),
+    ("newspapers", "page_count", "INTEGER NOT NULL DEFAULT 0"),
+    ("newspapers", "pages_processed", "INTEGER NOT NULL DEFAULT 0"),
+    ("newspapers", "status", "VARCHAR(20) NOT NULL DEFAULT 'pending'"),
+    ("newspapers", "note", "TEXT NULL"),
+    ("topics", "keywords_json", "TEXT NOT NULL DEFAULT '[]'"),
+    ("topics", "active", "INTEGER NOT NULL DEFAULT 1"),
+    ("article_topics", "matched_by", "VARCHAR(20) NOT NULL DEFAULT 'llm'"),
+    ("articles", "word_count", "INTEGER NOT NULL DEFAULT 0"),
+    ("articles", "summary_model", "VARCHAR(80) NULL"),
+    (
+        "articles",
+        "search_vector",
+        "tsvector GENERATED ALWAYS AS (to_tsvector('english', "
+        "coalesce(headline,'') || ' ' || coalesce(original_text,'') || ' ' || "
+        "coalesce(summary_text,''))) STORED",
+    ),
 ]
 
 
@@ -53,6 +72,16 @@ def _ensure_additive_columns(engine: Engine) -> None:
             conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl_type}"))
 
 
+def _ensure_search_index(engine: Engine) -> None:
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS idx_articles_search_vector "
+                "ON articles USING GIN(search_vector)"
+            )
+        )
+
+
 def init_db() -> None:
     """Create all tables if they do not already exist.
 
@@ -65,6 +94,7 @@ def init_db() -> None:
 
     Base.metadata.create_all(_engine)
     _ensure_additive_columns(_engine)
+    _ensure_search_index(_engine)
 
 
 def get_db() -> Iterator[Session]:

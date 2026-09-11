@@ -1,7 +1,7 @@
 """The ingest pipeline: PDF in, summarised and topic-tagged articles out.
 
     extract  ->  segment (LLM)  ->  stitch continuations  ->  store articles
-             ->  summarise + tag (LLM)  ->  store summaries  ->  FTS reindex
+             ->  summarise + tag (LLM)  ->  store summaries
 
 Design notes:
 
@@ -16,13 +16,12 @@ Design notes:
 
 from __future__ import annotations
 
-import json
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from sqlalchemy import select, text
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .config import CONFIG
@@ -31,10 +30,8 @@ from .db import (
     ArticleTopic,
     Edition,
     Page,
-    Summary,
     Topic,
     find_edition_by_hash,
-    reindex_article,
     session_scope,
     sha256_file,
 )
@@ -179,10 +176,10 @@ def _upsert_edition(
     edition = find_edition_by_hash(session, sha)
     if edition is None:
         edition = Edition(
-            source_name=doc.source_name,
+            name=doc.source_name,
             edition_date=doc.edition_date,
             pdf_path=str(pdf.resolve()),
-            pdf_sha256=sha,
+            file_hash=sha,
             page_count=doc.page_count,
             status="in_progress",
         )
@@ -271,27 +268,16 @@ def ingest_pdf(
         edition_id = edition.id
 
         if force:
-            stale_ids = list(
-                session.scalars(
-                    select(Article.id).where(Article.edition_id == edition_id)
-                ).all()
+            # Topic links go via ON DELETE CASCADE.
+            session.execute(
+                Article.__table__.delete().where(Article.newspaper_id == edition_id)
             )
-            for stale_id in stale_ids:
-                # Summaries and topic links go via ON DELETE CASCADE; the FTS
-                # table is not a real relation, so clear it explicitly.
-                session.execute(
-                    text("DELETE FROM articles_fts WHERE article_id = :aid"),
-                    {"aid": stale_id},
-                )
-                session.execute(
-                    Article.__table__.delete().where(Article.id == stale_id)
-                )
             session.flush()
 
         already_done_pages = {
             row
             for row in session.scalars(
-                select(Article.page_number).where(Article.edition_id == edition_id)
+                select(Article.page_number).where(Article.newspaper_id == edition_id)
             ).all()
         }
 
@@ -340,17 +326,16 @@ def ingest_pdf(
                 report.articles_skipped_short += 1
                 continue
             row = Article(
-                edition_id=report.edition_id,
+                newspaper_id=report.edition_id,
                 page_number=page_no,
                 headline=(art.headline or "(untitled)").strip(),
                 byline=(art.byline or None),
                 section=(art.section or None),
-                body_text=body,
+                original_text=body,
                 word_count=len(body.split()),
             )
             session.add(row)
             session.flush()
-            reindex_article(session, row)
             new_article_ids.append(row.id)
         report.articles_found = len(new_article_ids)
 
@@ -384,8 +369,10 @@ def _pending_article_ids(edition_id: int | None) -> list[int]:
         return list(
             session.scalars(
                 select(Article.id)
-                .outerjoin(Summary, Summary.article_id == Article.id)
-                .where(Article.edition_id == edition_id, Summary.id.is_(None))
+                .where(
+                    Article.newspaper_id == edition_id,
+                    Article.summary_text.is_(None),
+                )
                 .order_by(Article.page_number, Article.id)
             ).all()
         )
@@ -406,7 +393,11 @@ def summarise_one(
         article = session.get(Article, article_id)
         if article is None:
             raise ValueError(f"no article with id {article_id}")
-        headline, body, section = article.headline, article.body_text, article.section
+        headline, body, section = (
+            article.headline,
+            article.original_text,
+            article.section,
+        )
 
     counter = ""
     if index is not None and total is not None:
@@ -430,22 +421,13 @@ def summarise_one(
 
         known = _resolve_topic_rows(session, specs)
 
-        if article.summary is not None:
-            session.delete(article.summary)
-            session.flush()
-
-        session.add(
-            Summary(
-                article_id=article.id,
-                one_liner=result.one_liner.strip(),
-                bullets_json=json.dumps([b.strip() for b in result.bullets if b.strip()]),
-                entities_json=json.dumps(result.entities[:8]),
-                why_it_matters=(result.why_it_matters or None),
-                category=result.category,
-                read_minutes=max(1, result.read_minutes),
-                model=CONFIG.model,
-            )
-        )
+        article.summary_text = result.one_liner.strip()
+        article.bullets = [b.strip() for b in result.bullets if b.strip()]
+        article.entities = result.entities[:8]
+        article.why_it_matters = result.why_it_matters or None
+        article.category = result.category
+        article.read_minutes = max(1, result.read_minutes)
+        article.summary_model = CONFIG.model
 
         session.execute(
             ArticleTopic.__table__.delete().where(
@@ -480,7 +462,6 @@ def summarise_one(
 
         session.flush()
         session.refresh(article)
-        reindex_article(session, article)
 
     return tag_count
 
@@ -662,13 +643,13 @@ def prepare_edition(
         for page in doc.pages:
             existing = session.scalar(
                 select(Page).where(
-                    Page.edition_id == edition.id, Page.page_number == page.page_number
+                    Page.newspaper_id == edition.id, Page.page_number == page.page_number
                 )
             )
             if existing is None:
                 session.add(
                     Page(
-                        edition_id=edition.id,
+                        newspaper_id=edition.id,
                         page_number=page.page_number,
                         column_text=page.column_text,
                         layout_text=page.layout_text,
@@ -825,7 +806,7 @@ def load_response(
     with session_scope() as session:
         if edition_id is None:
             edition = session.scalar(
-                select(Edition).order_by(Edition.ingested_at.desc()).limit(1)
+                select(Edition).order_by(Edition.created_at.desc()).limit(1)
             )
             if edition is None:
                 report.errors.append(
@@ -843,7 +824,7 @@ def load_response(
         page_texts = {
             page.page_number: page.column_text
             for page in session.scalars(
-                select(Page).where(Page.edition_id == edition.id)
+                select(Page).where(Page.newspaper_id == edition.id)
             ).all()
         }
 
@@ -900,20 +881,19 @@ def load_response(
                         session, edition_id=report.edition_id, headline=article.headline
                     )
                     if prior is not None and body:
-                        prior.body_text = (
-                            prior.body_text.rstrip()
+                        prior.original_text = (
+                            prior.original_text.rstrip()
                             + f"\n\n[continued on page {page_no}]\n\n"
                             + body.lstrip()
                         )
-                        prior.word_count = len(prior.body_text.split())
+                        prior.word_count = len(prior.original_text.split())
                         session.flush()
-                        reindex_article(session, prior)
                         report.continuations_merged += 1
                         continue
 
                 row = session.scalar(
                     select(Article).where(
-                        Article.edition_id == report.edition_id,
+                        Article.newspaper_id == report.edition_id,
                         Article.page_number == page_no,
                         Article.headline == article.headline.strip(),
                     )
@@ -921,7 +901,7 @@ def load_response(
                 is_new = row is None
                 if row is None:
                     row = Article(
-                        edition_id=report.edition_id,
+                        newspaper_id=report.edition_id,
                         page_number=page_no,
                         headline=article.headline.strip(),
                     )
@@ -929,27 +909,18 @@ def load_response(
 
                 row.byline = article.byline
                 row.section = article.section
-                row.body_text = body
+                row.original_text = body
                 row.word_count = len(body.split())
                 row.body_source = body_source
+
+                row.summary_text = article.summary
+                row.bullets = article.bullets
+                row.entities = article.entities[:8]
+                row.why_it_matters = article.why
+                row.category = article.category
+                row.read_minutes = article.read_minutes
+                row.summary_model = "chat (manual paste)"
                 session.flush()
-
-                if row.summary is not None:
-                    session.delete(row.summary)
-                    session.flush()
-
-                session.add(
-                    Summary(
-                        article_id=row.id,
-                        one_liner=article.summary,
-                        bullets_json=json.dumps(article.bullets),
-                        entities_json=json.dumps(article.entities[:8]),
-                        why_it_matters=article.why,
-                        category=article.category,
-                        read_minutes=article.read_minutes,
-                        model="chat (manual paste)",
-                    )
-                )
 
                 session.execute(
                     ArticleTopic.__table__.delete().where(
@@ -982,7 +953,6 @@ def load_response(
 
                 session.flush()
                 session.refresh(row)
-                reindex_article(session, row)
 
                 if is_new:
                     report.articles_added += 1
@@ -1010,7 +980,7 @@ def _find_continuation_target(
         return None
     candidates = session.scalars(
         select(Article)
-        .where(Article.edition_id == edition_id)
+        .where(Article.newspaper_id == edition_id)
         .order_by(Article.page_number, Article.id)
     ).all()
     for candidate in candidates:

@@ -29,6 +29,8 @@ const els = {
   prevPage: document.getElementById("prevPage"),
   nextPage: document.getElementById("nextPage"),
   pageInfo: document.getElementById("pageInfo"),
+  categoryOptions: document.getElementById("categoryOptions"),
+  topicOptions: document.getElementById("topicOptions"),
 };
 
 let searchDebounce = null;
@@ -72,6 +74,20 @@ async function loadFilterOptions() {
       opt.value = t.name;
       opt.textContent = `${t.name} (${t.article_count})`;
       els.topic.appendChild(opt);
+    }
+
+    // Autocomplete suggestions for the tag editor (see startEditTags below).
+    els.categoryOptions.innerHTML = "";
+    for (const c of categories) {
+      const opt = document.createElement("option");
+      opt.value = c.category;
+      els.categoryOptions.appendChild(opt);
+    }
+    els.topicOptions.innerHTML = "";
+    for (const t of topics) {
+      const opt = document.createElement("option");
+      opt.value = t.name;
+      els.topicOptions.appendChild(opt);
     }
 
     const totalArticles = newspapers.reduce((sum, n) => sum + n.article_count, 0);
@@ -147,20 +163,7 @@ function renderCard(article) {
     entities.innerHTML = `<strong>Entities:</strong> ${escapeHtml(article.entities.join(", "))}`;
   }
 
-  const tagRow = document.createElement("div");
-  tagRow.className = "tag-row";
-  if (article.category) {
-    const catTag = document.createElement("span");
-    catTag.className = "tag category";
-    catTag.textContent = article.category;
-    tagRow.appendChild(catTag);
-  }
-  for (const t of article.topics || []) {
-    const tag = document.createElement("span");
-    tag.className = "tag";
-    tag.textContent = `${t.topic} ${(t.confidence * 100).toFixed(0)}%`;
-    tagRow.appendChild(tag);
-  }
+  const tagRow = buildTagRow(article);
 
   const toggleBtn = document.createElement("button");
   toggleBtn.className = "toggle-original secondary";
@@ -180,6 +183,100 @@ function renderCard(article) {
   card.appendChild(toggleBtn);
   card.appendChild(originalBox);
   return card;
+}
+
+function buildTagRow(article) {
+  const tagRow = document.createElement("div");
+  tagRow.className = "tag-row";
+  if (article.category) {
+    const catTag = document.createElement("span");
+    catTag.className = "tag category";
+    catTag.textContent = article.category;
+    tagRow.appendChild(catTag);
+  }
+  for (const t of article.topics || []) {
+    const tag = document.createElement("span");
+    tag.className = "tag";
+    tag.textContent = `${t.topic} ${(t.confidence * 100).toFixed(0)}%`;
+    tagRow.appendChild(tag);
+  }
+  const editBtn = document.createElement("button");
+  editBtn.className = "edit-tags-btn secondary";
+  editBtn.textContent = "Edit tags";
+  editBtn.addEventListener("click", () => startEditTags(article, tagRow));
+  tagRow.appendChild(editBtn);
+  return tagRow;
+}
+
+function startEditTags(article, tagRow) {
+  const editor = document.createElement("div");
+  editor.className = "tag-editor";
+
+  const catInput = document.createElement("input");
+  catInput.type = "text";
+  catInput.placeholder = "Category";
+  catInput.value = article.category || "";
+  catInput.setAttribute("list", "categoryOptions");
+
+  const topicsInput = document.createElement("input");
+  topicsInput.type = "text";
+  topicsInput.placeholder = "Topics, comma-separated";
+  topicsInput.value = (article.topics || []).map((t) => t.topic).join(", ");
+  topicsInput.setAttribute("list", "topicOptions");
+
+  const saveBtn = document.createElement("button");
+  saveBtn.textContent = "Save";
+  const cancelBtn = document.createElement("button");
+  cancelBtn.className = "secondary";
+  cancelBtn.textContent = "Cancel";
+
+  editor.appendChild(catInput);
+  editor.appendChild(topicsInput);
+  editor.appendChild(saveBtn);
+  editor.appendChild(cancelBtn);
+  tagRow.replaceWith(editor);
+
+  cancelBtn.addEventListener("click", () => {
+    editor.replaceWith(buildTagRow(article));
+  });
+
+  saveBtn.addEventListener("click", async () => {
+    saveBtn.disabled = true;
+    saveBtn.textContent = "Saving...";
+    try {
+      const updated = await saveTagEdits(
+        article.id,
+        catInput.value,
+        topicsInput.value
+      );
+      article.category = updated.category;
+      article.topics = updated.topics;
+      editor.replaceWith(buildTagRow(article));
+      loadFilterOptions();
+    } catch (err) {
+      console.error("Failed to save tags", err);
+      alert(`Could not save tags: ${err.message}`);
+      saveBtn.disabled = false;
+      saveBtn.textContent = "Save";
+    }
+  });
+}
+
+async function saveTagEdits(id, categoryText, topicsText) {
+  await fetchJSON(`${API}/articles/${id}/category`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ category: categoryText.trim() || null }),
+  });
+  const topics = topicsText
+    .split(",")
+    .map((t) => t.trim())
+    .filter(Boolean);
+  return fetchJSON(`${API}/articles/${id}/topics`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ topics }),
+  });
 }
 
 async function toggleOriginal(id, button, box) {

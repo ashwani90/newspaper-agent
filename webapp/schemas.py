@@ -1,7 +1,10 @@
 """Pydantic request/response schemas for the web API.
 
-ArticleIn / NewspaperIn / BulkIngestRequest are the contract the CLI's
-push-web command writes to. The Out schemas are what the browser UI reads.
+ArticleIn / NewspaperIn / BulkIngestRequest are the contract for the general
+bulk-import endpoint (POST /api/articles/bulk); the CLI itself writes
+directly via SQLAlchemy and doesn't use it. The Out schemas are what the
+browser UI reads, and the *Update schemas are what it writes back (read
+status, category, topics).
 """
 
 from __future__ import annotations
@@ -85,6 +88,14 @@ class ArticleDetailOut(ArticleOut):
 
 class ArticleReadUpdate(BaseModel):
     read: bool
+
+
+class ArticleCategoryUpdate(BaseModel):
+    category: str | None = None
+
+
+class ArticleTopicsUpdate(BaseModel):
+    topics: list[str] = Field(default_factory=list)
 
 
 class ArticleListResponse(BaseModel):

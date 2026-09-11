@@ -18,9 +18,24 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 _TMP = tempfile.mkdtemp(prefix="newsagent-manual-")
-os.environ["NEWSAGENT_DB"] = str(Path(_TMP) / "test.db")
+# Isolate this run in its own Postgres database (dropped and recreated
+# below), before webapp.config/newsagent.config are imported.
+os.environ["POSTGRES_DB"] = os.getenv(
+    "NEWSAGENT_TEST_POSTGRES_DB", "newspaper_agent_test"
+)
 os.environ["NEWSAGENT_TOPICS_FILE"] = str(ROOT / "topics.txt")
 os.environ["NEWSAGENT_PROMPTS"] = str(Path(_TMP) / "prompts")
+
+from webapp.database import Base, get_engine  # noqa: E402
+from webapp import models  # noqa: E402,F401 (registers model classes on Base)
+
+try:
+    get_engine().connect().close()
+except Exception as exc:  # noqa: BLE001
+    print(f"SKIP: no reachable test Postgres database ({exc})")
+    sys.exit(0)
+
+Base.metadata.drop_all(get_engine())
 
 from newsagent import pipeline, queries  # noqa: E402
 from newsagent.manual import (  # noqa: E402

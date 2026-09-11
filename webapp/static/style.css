@@ -255,6 +255,35 @@ button.secondary:disabled {
   font-weight: 600;
 }
 
+.edit-tags-btn {
+  font-size: 11px;
+  padding: 2px 9px;
+  border-radius: 999px;
+}
+
+.tag-editor {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.tag-editor input {
+  padding: 5px 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-card);
+  color: var(--fg);
+  font-size: 13px;
+  flex: 1 1 160px;
+  min-width: 120px;
+}
+
+.tag-editor button {
+  font-size: 12px;
+  padding: 5px 12px;
+}
+
 .toggle-original {
   background: var(--tag-bg);
   color: var(--fg);
