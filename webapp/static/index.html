@@ -16,62 +16,60 @@
   <div class="grain" aria-hidden="true"></div>
 
   <header class="masthead">
-    <div class="masthead-inner">
-      <span class="eyebrow eyebrow--muted">Daily Digest &middot; Automated</span>
-      <h1>Newspaper Agent</h1>
-      <div class="stats" id="stats"></div>
-    </div>
+    <span class="eyebrow eyebrow--muted">Daily Digest &middot; Automated</span>
+    <h1>Newspaper Agent</h1>
+    <div class="stats" id="stats"></div>
   </header>
 
-  <div class="filters-dock">
-    <section class="filters">
-      <div class="filters-search">
-        <svg class="icon-search" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.5" />
-          <path d="M20 20L16.5 16.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
-        </svg>
-        <input id="search" type="search" placeholder="Search headline, summary, body&hellip;" />
-        <span class="kbd">/</span>
-      </div>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="filters">
+        <div class="filters-search">
+          <svg class="icon-search" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.5" />
+            <path d="M20 20L16.5 16.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+          </svg>
+          <input id="search" type="search" placeholder="Search&hellip;" />
+          <span class="kbd">/</span>
+        </div>
 
-      <div class="filters-row">
+        <label class="field-label">Newspaper</label>
         <select id="newspaper">
           <option value="">All newspapers</option>
         </select>
 
+        <label class="field-label">Category</label>
         <select id="category">
           <option value="">All categories</option>
         </select>
 
+        <label class="field-label">Topic</label>
         <select id="topic">
           <option value="">All topics</option>
         </select>
 
-        <label class="date-label">
-          From
+        <label class="field-label">Date range</label>
+        <div class="date-row">
           <input id="dateFrom" type="date" />
-        </label>
-        <label class="date-label">
-          To
           <input id="dateTo" type="date" />
-        </label>
+        </div>
 
         <label class="checkbox-label">
           <input id="unreadOnly" type="checkbox" />
           Unread only
         </label>
 
-        <button id="clearFilters" class="btn btn--ghost">Clear</button>
+        <button id="clearFilters" class="btn btn--ghost btn--block">Clear filters</button>
       </div>
-    </section>
+    </aside>
+
+    <datalist id="categoryOptions"></datalist>
+    <datalist id="topicOptions"></datalist>
+
+    <main id="list" class="article-list">
+      <p class="empty">Loading articles&hellip;</p>
+    </main>
   </div>
-
-  <datalist id="categoryOptions"></datalist>
-  <datalist id="topicOptions"></datalist>
-
-  <main id="list" class="article-list">
-    <p class="empty">Loading articles&hellip;</p>
-  </main>
 
   <footer class="pagination">
     <button id="prevPage" class="btn btn--icon-leading" aria-label="Previous page">

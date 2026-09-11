@@ -81,10 +81,7 @@ body {
 /* ---- Masthead ------------------------------------------------------------ */
 
 .masthead {
-  padding: 72px 24px 40px;
-}
-
-.masthead-inner {
+  padding: 56px 24px 32px;
   max-width: 760px;
   margin: 0 auto;
   text-align: center;
@@ -104,51 +101,63 @@ body {
   color: var(--ink-soft);
 }
 
-/* ---- Filter island -------------------------------------------------------- */
+/* ---- Layout: sidebar + reading pane --------------------------------------- */
 
-.filters-dock {
-  position: sticky;
-  top: 16px;
-  z-index: 3;
+.layout {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 0 24px;
   display: flex;
-  justify-content: center;
-  padding: 0 16px;
-  margin-bottom: 8px;
+  align-items: flex-start;
+  gap: 32px;
 }
 
+.sidebar {
+  flex: 0 0 clamp(210px, 19vw, 270px);
+  position: sticky;
+  top: 24px;
+}
+
+/* ---- Filters (sidebar contents) -------------------------------------------- */
+
 .filters {
-  width: 100%;
-  max-width: 860px;
   background: rgba(255, 253, 249, 0.86);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   border: 1px solid var(--hairline);
   border-radius: var(--radius-shell);
   box-shadow: var(--shadow-float);
-  padding: 14px 16px;
+  padding: 20px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .filters-search {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 4px 6px 4px 14px;
-  margin-bottom: 10px;
+  gap: 8px;
+  border: 1px solid var(--hairline);
+  border-radius: 13px;
+  background: var(--bg-elevated);
+  padding: 8px 10px 8px 12px;
+  margin-bottom: 6px;
 }
 
 .icon-search {
-  width: 17px;
-  height: 17px;
+  width: 16px;
+  height: 16px;
   color: var(--ink-faint);
   flex: none;
 }
 
 #search {
   flex: 1;
+  min-width: 0;
   border: none;
   background: transparent;
   font-family: var(--font-body);
-  font-size: 15px;
+  font-size: 13.5px;
   color: var(--ink);
   outline: none;
 }
@@ -158,21 +167,26 @@ body {
 }
 
 .kbd {
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--ink-faint);
   border: 1px solid var(--hairline);
   border-radius: 6px;
   padding: 1px 6px;
+  flex: none;
 }
 
-.filters-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+.field-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin: 6px 2px -2px;
 }
 
 .filters select,
 .filters input[type="date"] {
+  width: 100%;
   border: 1px solid var(--hairline);
   border-radius: 13px;
   background: var(--bg-elevated);
@@ -182,21 +196,28 @@ body {
   padding: 8px 12px;
 }
 
-.date-label,
-.checkbox-label {
+.date-row {
   display: flex;
-  align-items: center;
   gap: 6px;
-  font-size: 12px;
-  color: var(--ink-soft);
-  border: 1px solid var(--hairline);
-  border-radius: 13px;
-  padding: 6px 12px;
-  background: var(--bg-elevated);
+}
+
+.date-row input {
+  min-width: 0;
+  font-size: 11.5px;
+  padding: 8px 6px;
 }
 
 .checkbox-label {
-  padding-left: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  border: 1px solid var(--hairline);
+  border-radius: 13px;
+  padding: 8px 12px;
+  background: var(--bg-elevated);
+  margin-top: 4px;
 }
 
 .checkbox-label input {
@@ -205,11 +226,49 @@ body {
   accent-color: var(--accent);
 }
 
-.date-label input {
-  border: none;
-  padding: 0;
-  background: transparent;
-  font-size: 12px;
+.btn--block {
+  width: 100%;
+  margin-top: 6px;
+  text-align: center;
+}
+
+@media (max-width: 880px) {
+  .layout {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    flex-basis: auto;
+    width: 100%;
+    position: static;
+  }
+
+  .filters {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .filters-search {
+    flex: 1 1 100%;
+    margin-bottom: 0;
+  }
+
+  .field-label {
+    display: none;
+  }
+
+  .filters select,
+  .date-row,
+  .checkbox-label {
+    flex: 1 1 160px;
+    width: auto;
+  }
+
+  .btn--block {
+    width: auto;
+    flex: 1 1 160px;
+    margin-top: 0;
+  }
 }
 
 /* ---- Buttons -------------------------------------------------------------- */
@@ -292,9 +351,11 @@ body {
 /* ---- Article feed ---------------------------------------------------------- */
 
 .article-list {
-  max-width: 720px;
-  margin: 24px auto 0;
-  padding: 8px 20px 40px;
+  flex: 1 1 0%;
+  min-width: 0;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 4px 0 40px;
   display: flex;
   flex-direction: column;
   gap: 28px;
