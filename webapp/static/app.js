@@ -11,7 +11,7 @@ const state = {
     date_from: "",
     date_to: "",
     q: "",
-    unread_only: false,
+    unread_only: true,
   },
 };
 
