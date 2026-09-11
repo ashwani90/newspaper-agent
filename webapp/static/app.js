@@ -33,7 +33,24 @@ const els = {
   pageInfo: document.getElementById("pageInfo"),
   categoryOptions: document.getElementById("categoryOptions"),
   topicOptions: document.getElementById("topicOptions"),
+  themeToggle: document.getElementById("themeToggle"),
 };
+
+// Theme: an explicit choice is saved and always wins; with no saved choice,
+// the OS preference (prefers-color-scheme, handled in CSS) applies instead --
+// see the inline head script in index.html for the pre-paint version of this.
+els.themeToggle.addEventListener("click", () => {
+  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const current = document.documentElement.getAttribute("data-theme") || (prefersDark ? "dark" : "light");
+  const next = current === "dark" ? "light" : "dark";
+  document.documentElement.setAttribute("data-theme", next);
+  try {
+    localStorage.setItem("theme", next);
+  } catch (err) {
+    // Private window or site data blocked -- the toggle still works for this
+    // page load, it just won't be remembered.
+  }
+});
 
 let searchDebounce = null;
 

@@ -11,6 +11,17 @@
     rel="stylesheet"
   />
   <link rel="stylesheet" href="style.css" />
+  <script>
+    // Applied before first paint so there is no flash of the wrong theme.
+    (function () {
+      try {
+        var saved = localStorage.getItem("theme");
+        if (saved === "dark" || saved === "light") {
+          document.documentElement.setAttribute("data-theme", saved);
+        }
+      } catch (e) {}
+    })();
+  </script>
 </head>
 <body>
   <div class="grain" aria-hidden="true"></div>
@@ -20,7 +31,18 @@
       <h1>Newspaper Agent</h1>
       <span class="eyebrow eyebrow--muted">Daily Digest &middot; Automated</span>
     </div>
-    <div class="stats" id="stats"></div>
+    <div class="masthead-actions">
+      <div class="stats" id="stats"></div>
+      <button id="themeToggle" class="theme-toggle" aria-label="Toggle dark mode">
+        <svg class="icon-sun" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="12" cy="12" r="4.5" stroke="currentColor" stroke-width="1.5" />
+          <path d="M12 2.5v2.5M12 19v2.5M4.2 4.2l1.8 1.8M18 18l1.8 1.8M2.5 12H5M19 12h2.5M4.2 19.8L6 18M18 6l1.8-1.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+        </svg>
+        <svg class="icon-moon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.8 6.8 0 0 0 10.5 10.5z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
+        </svg>
+      </button>
+    </div>
   </header>
 
   <div class="layout">
