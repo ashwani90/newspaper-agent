@@ -4,6 +4,8 @@ const state = {
   page: 1,
   pageSize: 10,
   total: 0,
+  totalAll: null,
+  editionCount: 0,
   filters: {
     newspaper: "",
     category: "",
@@ -105,8 +107,9 @@ async function loadFilterOptions() {
       els.topicOptions.appendChild(opt);
     }
 
-    const totalArticles = newspapers.reduce((sum, n) => sum + n.article_count, 0);
-    els.stats.textContent = `${totalArticles} articles across ${newspapers.length} edition(s)`;
+    state.totalAll = newspapers.reduce((sum, n) => sum + n.article_count, 0);
+    state.editionCount = newspapers.length;
+    updateStats();
   } catch (err) {
     console.error("Failed to load filter options", err);
   }
@@ -121,6 +124,15 @@ function formatDate(iso) {
     month: "short",
     day: "numeric",
   });
+}
+
+function updateStats() {
+  if (state.totalAll == null) return;
+  const editions = `${state.editionCount} edition(s)`;
+  els.stats.textContent =
+    state.total === state.totalAll
+      ? `${state.totalAll} articles across ${editions}`
+      : `${state.total} shown of ${state.totalAll} articles across ${editions}`;
 }
 
 function escapeHtml(str) {
@@ -386,6 +398,7 @@ async function loadArticles() {
   try {
     const data = await fetchJSON(`${API}/articles?${params}`);
     state.total = data.total;
+    updateStats();
     els.list.innerHTML = "";
     if (!data.items.length) {
       els.list.innerHTML = '<p class="empty">No articles match these filters.</p>';
