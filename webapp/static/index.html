@@ -7,65 +7,86 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
-    href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=JetBrains+Mono:wght@400;500;700&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,500&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
     rel="stylesheet"
   />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <header class="topbar">
-    <h1>Newspaper Agent</h1>
-    <div class="masthead-meta">REV 1.0 // AUTOMATED CLASSIFICATION SYSTEM // ALL EDITIONS</div>
-    <div class="stats" id="stats"></div>
+  <div class="grain" aria-hidden="true"></div>
+
+  <header class="masthead">
+    <div class="masthead-inner">
+      <span class="eyebrow eyebrow--muted">Daily Digest &middot; Automated</span>
+      <h1>Newspaper Agent</h1>
+      <div class="stats" id="stats"></div>
+    </div>
   </header>
 
-  <section class="filters">
-    <div class="section-label">[ FILTER MATRIX ]</div>
-    <div class="filters-row">
-      <input id="search" type="search" placeholder="SEARCH HEADLINE / SUMMARY / BODY ... (/)" />
+  <div class="filters-dock">
+    <section class="filters">
+      <div class="filters-search">
+        <svg class="icon-search" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.5" />
+          <path d="M20 20L16.5 16.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+        </svg>
+        <input id="search" type="search" placeholder="Search headline, summary, body&hellip;" />
+        <span class="kbd">/</span>
+      </div>
 
-      <select id="newspaper">
-        <option value="">ALL NEWSPAPERS</option>
-      </select>
+      <div class="filters-row">
+        <select id="newspaper">
+          <option value="">All newspapers</option>
+        </select>
 
-      <select id="category">
-        <option value="">ALL CATEGORIES</option>
-      </select>
+        <select id="category">
+          <option value="">All categories</option>
+        </select>
 
-      <select id="topic">
-        <option value="">ALL TOPICS</option>
-      </select>
+        <select id="topic">
+          <option value="">All topics</option>
+        </select>
 
-      <label class="date-label">
-        FROM
-        <input id="dateFrom" type="date" />
-      </label>
-      <label class="date-label">
-        TO
-        <input id="dateTo" type="date" />
-      </label>
+        <label class="date-label">
+          From
+          <input id="dateFrom" type="date" />
+        </label>
+        <label class="date-label">
+          To
+          <input id="dateTo" type="date" />
+        </label>
 
-      <label class="checkbox-label">
-        <input id="unreadOnly" type="checkbox" />
-        UNREAD ONLY
-      </label>
+        <label class="checkbox-label">
+          <input id="unreadOnly" type="checkbox" />
+          Unread only
+        </label>
 
-      <button id="clearFilters" class="secondary">CLEAR //</button>
-    </div>
-  </section>
+        <button id="clearFilters" class="btn btn--ghost">Clear</button>
+      </div>
+    </section>
+  </div>
 
   <datalist id="categoryOptions"></datalist>
   <datalist id="topicOptions"></datalist>
 
-  <div class="section-label">[ ARTICLE FEED ]</div>
   <main id="list" class="article-list">
-    <p class="empty">LOADING ARTICLES...</p>
+    <p class="empty">Loading articles&hellip;</p>
   </main>
 
   <footer class="pagination">
-    <button id="prevPage" class="secondary">&lt;&lt;&lt; PREV</button>
+    <button id="prevPage" class="btn btn--icon-leading" aria-label="Previous page">
+      <span class="icon-circle">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 6l-6 6 6 6" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </span>
+      Prev
+    </button>
     <span id="pageInfo"></span>
-    <button id="nextPage" class="secondary">NEXT &gt;&gt;&gt;</button>
+    <button id="nextPage" class="btn btn--icon-trailing" aria-label="Next page">
+      Next
+      <span class="icon-circle">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </span>
+    </button>
   </footer>
 
   <script src="app.js"></script>

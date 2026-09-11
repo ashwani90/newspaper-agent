@@ -35,6 +35,21 @@ const els = {
 
 let searchDebounce = null;
 
+// Scroll-entry reveal: a card fades/slides in once, the first time it enters
+// the viewport. transform/opacity only, per the design skill's performance
+// guardrails -- no layout-triggering properties.
+const revealObserver = new IntersectionObserver(
+  (entries) => {
+    for (const entry of entries) {
+      if (entry.isIntersecting) {
+        entry.target.classList.add("in-view");
+        revealObserver.unobserve(entry.target);
+      }
+    }
+  },
+  { threshold: 0.08 }
+);
+
 function qs(params) {
   const usp = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
@@ -115,6 +130,9 @@ function escapeHtml(str) {
 }
 
 function renderCard(article) {
+  const shell = document.createElement("div");
+  shell.className = "card-shell";
+
   const card = document.createElement("article");
   card.className = "card" + (article.is_read ? " is-read" : "");
   card.dataset.id = article.id;
@@ -133,6 +151,14 @@ function renderCard(article) {
   markBtn.textContent = article.is_read ? "Mark unread" : "Mark read";
   markBtn.addEventListener("click", () => toggleRead(article.id, !article.is_read));
   meta.appendChild(markBtn);
+
+  const eyebrowRow = document.createElement("div");
+  eyebrowRow.className = "eyebrow-row";
+  eyebrowRow.hidden = !article.category;
+  const eyebrowBadge = document.createElement("span");
+  eyebrowBadge.className = "eyebrow";
+  eyebrowBadge.textContent = article.category || "";
+  eyebrowRow.appendChild(eyebrowBadge);
 
   const h3 = document.createElement("h3");
   h3.textContent = article.headline;
@@ -163,17 +189,27 @@ function renderCard(article) {
     entities.innerHTML = `<strong>Entities:</strong> ${escapeHtml(article.entities.join(", "))}`;
   }
 
-  const tagRow = buildTagRow(article);
+  const tagRow = buildTagRow(article, eyebrowRow, eyebrowBadge);
 
   const toggleBtn = document.createElement("button");
-  toggleBtn.className = "toggle-original secondary";
-  toggleBtn.textContent = "Show original article";
+  toggleBtn.className = "toggle-original";
+  const toggleIcon = document.createElement("span");
+  toggleIcon.className = "icon-circle";
+  toggleIcon.innerHTML =
+    '<svg viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const toggleLabel = document.createElement("span");
+  toggleLabel.textContent = "Show original article";
+  toggleBtn.appendChild(toggleLabel);
+  toggleBtn.appendChild(toggleIcon);
   const originalBox = document.createElement("div");
   originalBox.className = "original-text";
   originalBox.hidden = true;
-  toggleBtn.addEventListener("click", () => toggleOriginal(article.id, toggleBtn, originalBox));
+  toggleBtn.addEventListener("click", () =>
+    toggleOriginal(article.id, toggleBtn, toggleLabel, toggleIcon, originalBox)
+  );
 
   card.appendChild(meta);
+  card.appendChild(eyebrowRow);
   card.appendChild(h3);
   card.appendChild(p);
   if (bullets.childElementCount) card.appendChild(bullets);
@@ -182,33 +218,30 @@ function renderCard(article) {
   card.appendChild(tagRow);
   card.appendChild(toggleBtn);
   card.appendChild(originalBox);
-  return card;
+
+  shell.appendChild(card);
+  revealObserver.observe(shell);
+  return shell;
 }
 
-function buildTagRow(article) {
+function buildTagRow(article, eyebrowRow, eyebrowBadge) {
   const tagRow = document.createElement("div");
   tagRow.className = "tag-row";
-  if (article.category) {
-    const catTag = document.createElement("span");
-    catTag.className = "tag category";
-    catTag.textContent = article.category;
-    tagRow.appendChild(catTag);
-  }
   for (const t of article.topics || []) {
     const tag = document.createElement("span");
     tag.className = "tag";
-    tag.textContent = `${t.topic} ${(t.confidence * 100).toFixed(0)}%`;
+    tag.textContent = `${t.topic} · ${(t.confidence * 100).toFixed(0)}%`;
     tagRow.appendChild(tag);
   }
   const editBtn = document.createElement("button");
-  editBtn.className = "edit-tags-btn secondary";
+  editBtn.className = "edit-tags-btn";
   editBtn.textContent = "Edit tags";
-  editBtn.addEventListener("click", () => startEditTags(article, tagRow));
+  editBtn.addEventListener("click", () => startEditTags(article, tagRow, eyebrowRow, eyebrowBadge));
   tagRow.appendChild(editBtn);
   return tagRow;
 }
 
-function startEditTags(article, tagRow) {
+function startEditTags(article, tagRow, eyebrowRow, eyebrowBadge) {
   const editor = document.createElement("div");
   editor.className = "tag-editor";
 
@@ -225,9 +258,10 @@ function startEditTags(article, tagRow) {
   topicsInput.setAttribute("list", "topicOptions");
 
   const saveBtn = document.createElement("button");
+  saveBtn.className = "btn";
   saveBtn.textContent = "Save";
   const cancelBtn = document.createElement("button");
-  cancelBtn.className = "secondary";
+  cancelBtn.className = "btn btn--ghost";
   cancelBtn.textContent = "Cancel";
 
   editor.appendChild(catInput);
@@ -237,7 +271,7 @@ function startEditTags(article, tagRow) {
   tagRow.replaceWith(editor);
 
   cancelBtn.addEventListener("click", () => {
-    editor.replaceWith(buildTagRow(article));
+    editor.replaceWith(buildTagRow(article, eyebrowRow, eyebrowBadge));
   });
 
   saveBtn.addEventListener("click", async () => {
@@ -251,7 +285,9 @@ function startEditTags(article, tagRow) {
       );
       article.category = updated.category;
       article.topics = updated.topics;
-      editor.replaceWith(buildTagRow(article));
+      eyebrowBadge.textContent = article.category || "";
+      eyebrowRow.hidden = !article.category;
+      editor.replaceWith(buildTagRow(article, eyebrowRow, eyebrowBadge));
       loadFilterOptions();
     } catch (err) {
       console.error("Failed to save tags", err);
@@ -279,10 +315,11 @@ async function saveTagEdits(id, categoryText, topicsText) {
   });
 }
 
-async function toggleOriginal(id, button, box) {
+async function toggleOriginal(id, button, label, icon, box) {
   if (!box.hidden) {
     box.hidden = true;
-    button.textContent = "Show original article";
+    label.textContent = "Show original article";
+    icon.style.transform = "";
     return;
   }
   if (!box.dataset.loaded) {
@@ -300,7 +337,8 @@ async function toggleOriginal(id, button, box) {
   } else {
     box.hidden = false;
   }
-  button.textContent = "Hide original article";
+  label.textContent = "Hide original article";
+  icon.style.transform = "rotate(180deg)";
 }
 
 async function toggleRead(id, read) {
