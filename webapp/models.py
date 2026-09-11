@@ -17,6 +17,7 @@ WHERE clause.
 
 from __future__ import annotations
 
+import json
 from datetime import date, datetime
 
 from sqlalchemy import (
@@ -107,6 +108,10 @@ class Topic(Base):
     article_links: Mapped[list["ArticleTopic"]] = relationship(
         back_populates="topic", cascade="all, delete-orphan"
     )
+
+    @property
+    def keywords(self) -> list[str]:
+        return json.loads(self.keywords_json or "[]")
 
 
 class Article(Base):

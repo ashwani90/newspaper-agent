@@ -1,28 +1,20 @@
-:root {
-  color-scheme: light dark;
-  --bg: #f7f7f5;
-  --bg-card: #ffffff;
-  --fg: #1a1a1a;
-  --fg-dim: #6b6b6b;
-  --border: #e2e2e0;
-  --accent: #2563eb;
-  --accent-bg: #eef2ff;
-  --tag-bg: #f0f0ee;
-  --shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-}
+/* Swiss Industrial Print -- one substrate, committed to fully (see
+   .claude/skills/SKILL.md). Newsprint ground, carbon ink type, aviation-red
+   accent. No gradients, no radius, no soft shadows. */
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #16171a;
-    --bg-card: #202226;
-    --fg: #e8e8e6;
-    --fg-dim: #9a9a9a;
-    --border: #33353a;
-    --accent: #5b8def;
-    --accent-bg: #1c2740;
-    --tag-bg: #2a2c31;
-    --shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
-  }
+:root {
+  color-scheme: light;
+  --bg: #f4f4f0;
+  --bg-card: #eae8e3;
+  --fg: #0a0a0a;
+  --fg-dim: #4a4a46;
+  --border: #0a0a0a;
+  --accent: #e61919;
+  --accent-bg: #f4f4f0;
+  --tag-bg: #dedcd5;
+  --shadow: none;
+  --font-macro: "Archivo Black", "Arial Black", sans-serif;
+  --font-micro: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 }
 
 * {
@@ -31,52 +23,107 @@
 
 body {
   margin: 0;
-  font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: var(--font-micro);
   background: var(--bg);
   color: var(--fg);
+  font-size: 13px;
 }
 
+/* ---- Masthead ---------------------------------------------------------- */
+
 .topbar {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  padding: 20px 24px 8px;
+  padding: 28px 24px 16px;
   max-width: 960px;
   margin: 0 auto;
+  border-bottom: 3px solid var(--border);
 }
 
 .topbar h1 {
-  font-size: 22px;
+  font-family: var(--font-macro);
+  font-size: clamp(2.2rem, 7vw, 4.5rem);
+  line-height: 0.9;
+  letter-spacing: -0.03em;
+  text-transform: uppercase;
   margin: 0;
 }
 
-.stats {
-  font-size: 13px;
+.topbar h1::before {
+  content: "[ ";
+  color: var(--accent);
+}
+.topbar h1::after {
+  content: " ]";
+  color: var(--accent);
+}
+
+.masthead-meta {
+  margin-top: 10px;
+  font-family: var(--font-micro);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--fg-dim);
 }
 
+.stats {
+  margin-top: 4px;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+
+/* ---- Section labels ----------------------------------------------------- */
+
+.section-label {
+  max-width: 960px;
+  margin: 18px auto 0;
+  padding: 0 24px;
+  font-family: var(--font-micro);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+}
+
+/* ---- Filters ------------------------------------------------------------ */
+
 .filters {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 8px 24px 16px;
   max-width: 960px;
   margin: 0 auto;
+  padding: 8px 24px 16px;
+}
+
+.filters-row {
+  display: flex;
+  flex-wrap: wrap;
+  border: 1px solid var(--border);
+  border-right: none;
+}
+
+.filters-row > * {
+  background: var(--bg-card);
+  margin: 0;
+  border-right: 1px solid var(--border);
 }
 
 .filters input,
 .filters select {
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  padding: 9px 10px;
+  border: none;
+  border-right: 1px solid var(--border);
+  border-radius: 0;
   background: var(--bg-card);
   color: var(--fg);
-  font-size: 14px;
+  font-family: var(--font-micro);
+  font-size: 12px;
+  text-transform: uppercase;
 }
 
 #search {
   flex: 1 1 260px;
   min-width: 200px;
+  text-transform: none;
 }
 
 .date-label,
@@ -84,36 +131,45 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 13px;
+  padding: 0 10px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
   color: var(--fg-dim);
-}
-
-.checkbox-label {
-  padding: 0 4px;
+  text-transform: uppercase;
 }
 
 .checkbox-label input {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   accent-color: var(--accent);
 }
 
+/* ---- Buttons -------------------------------------------------------------- */
+
 button {
   cursor: pointer;
-  border: none;
-  border-radius: 6px;
+  border: 1px solid var(--border);
+  border-radius: 0;
   padding: 8px 14px;
-  font-size: 14px;
+  font-family: var(--font-micro);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: var(--fg);
+  color: var(--bg);
 }
 
 button.secondary {
-  background: var(--tag-bg);
+  background: var(--bg-card);
   color: var(--fg);
   border: 1px solid var(--border);
 }
 
 button.secondary:hover {
-  background: var(--border);
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
 }
 
 button.secondary:disabled {
@@ -121,70 +177,84 @@ button.secondary:disabled {
   cursor: default;
 }
 
+/* ---- Article list --------------------------------------------------------- */
+
 .article-list {
-  max-width: 760px;
+  max-width: 960px;
   margin: 0 auto;
-  padding: 0 24px 24px;
+  padding: 10px 24px 24px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
 }
 
 .empty {
   color: var(--fg-dim);
-  padding: 40px 0;
+  padding: 40px 24px;
   text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 12px;
+  background: var(--bg-card);
 }
 
 .card {
   background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 16px 18px;
+  border: none;
+  border-radius: 0;
+  padding: 18px 20px;
   box-shadow: var(--shadow);
-  transition: opacity 0.15s, border-color 0.15s;
 }
 
 .card.is-read {
-  opacity: 0.6;
+  opacity: 0.5;
 }
 
 .card.is-read:hover {
-  opacity: 0.85;
+  opacity: 0.8;
 }
 
 .card-meta {
-  font-size: 12px;
+  font-family: var(--font-micro);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   color: var(--fg-dim);
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
 }
 
 .card-meta .newspaper {
-  font-weight: 600;
+  font-weight: 700;
   color: var(--accent);
 }
 
 .read-badge {
-  background: var(--tag-bg);
-  border-radius: 999px;
-  padding: 1px 9px;
-  font-size: 11px;
+  background: var(--fg);
+  color: var(--bg);
+  border-radius: 0;
+  padding: 1px 8px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
 }
 
 .mark-read-btn {
   margin-left: auto;
-  background: var(--accent-bg);
-  color: var(--accent);
-  font-weight: 600;
-  font-size: 12px;
-  padding: 5px 12px;
-  border-radius: 999px;
+  background: var(--bg);
+  color: var(--fg);
+  font-weight: 700;
+  font-size: 10px;
+  padding: 5px 11px;
+  border-radius: 0;
+  border: 1px solid var(--border);
 }
 
 .card.is-read .mark-read-btn {
@@ -193,113 +263,132 @@ button.secondary:disabled {
 }
 
 .card h3 {
-  margin: 0 0 8px;
-  font-size: 18px;
-  line-height: 1.3;
+  margin: 0 0 10px;
+  font-family: var(--font-macro);
+  font-size: 20px;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
 }
 
 .card p.summary {
   margin: 0 0 10px;
   color: var(--fg);
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 500;
   line-height: 1.45;
 }
 
 .card .bullets {
   margin: 0 0 10px;
-  padding-left: 20px;
+  padding-left: 18px;
 }
 
 .card .bullets li {
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.5;
   margin-bottom: 3px;
 }
 
 .card .why-matters {
   margin: 0 0 10px;
-  font-size: 14px;
+  padding: 8px 10px;
+  border-left: 3px solid var(--accent);
+  background: var(--bg);
+  font-size: 13px;
   line-height: 1.45;
   color: var(--fg);
 }
 
 .card .entities {
   margin: 0 0 10px;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--fg-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
 .card .entities strong {
   color: var(--fg);
 }
 
+/* ---- Tags / category ------------------------------------------------------ */
+
 .tag-row {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
   margin-bottom: 10px;
 }
 
 .tag {
   background: var(--tag-bg);
-  border-radius: 999px;
-  padding: 2px 10px;
-  font-size: 12px;
+  border: 1px solid var(--border);
+  border-radius: 0;
+  padding: 2px 8px;
+  font-family: var(--font-micro);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   color: var(--fg-dim);
 }
 
 .tag.category {
-  background: var(--accent-bg);
-  color: var(--accent);
-  font-weight: 600;
+  background: var(--fg);
+  color: var(--bg);
+  font-weight: 700;
 }
 
 .edit-tags-btn {
-  font-size: 11px;
-  padding: 2px 9px;
-  border-radius: 999px;
+  font-size: 10px;
+  padding: 2px 8px;
+  background: var(--bg);
 }
 
 .tag-editor {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
   margin-bottom: 10px;
+  border: 1px solid var(--border);
+  border-right: none;
 }
 
 .tag-editor input {
-  padding: 5px 9px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg-card);
+  padding: 6px 9px;
+  border: none;
+  border-right: 1px solid var(--border);
+  background: var(--bg);
   color: var(--fg);
-  font-size: 13px;
+  font-family: var(--font-micro);
+  font-size: 12px;
   flex: 1 1 160px;
   min-width: 120px;
 }
 
 .tag-editor button {
-  font-size: 12px;
-  padding: 5px 12px;
+  font-size: 10px;
+  padding: 6px 12px;
 }
 
+/* ---- Original text -------------------------------------------------------- */
+
 .toggle-original {
-  background: var(--tag-bg);
+  background: var(--bg);
   color: var(--fg);
   border: 1px solid var(--border);
-  font-size: 13px;
+  font-size: 11px;
   padding: 6px 12px;
 }
 
 .original-text {
   white-space: pre-wrap;
   line-height: 1.6;
-  font-size: 14px;
+  font-size: 13px;
   margin-top: 10px;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 0;
   padding: 12px 14px;
 }
 
@@ -308,14 +397,19 @@ button.secondary:disabled {
   font-style: italic;
 }
 
+/* ---- Pagination ------------------------------------------------------------ */
+
 .pagination {
-  max-width: 760px;
+  max-width: 960px;
   margin: 0 auto;
-  padding: 0 24px 40px;
+  padding: 16px 24px 40px;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 16px;
-  font-size: 14px;
+  font-family: var(--font-micro);
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
   color: var(--fg-dim);
 }

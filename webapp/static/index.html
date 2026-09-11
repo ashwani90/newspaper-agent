@@ -4,57 +4,68 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Newspaper Agent</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=JetBrains+Mono:wght@400;500;700&display=swap"
+    rel="stylesheet"
+  />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <header class="topbar">
     <h1>Newspaper Agent</h1>
+    <div class="masthead-meta">REV 1.0 // AUTOMATED CLASSIFICATION SYSTEM // ALL EDITIONS</div>
     <div class="stats" id="stats"></div>
   </header>
 
   <section class="filters">
-    <input id="search" type="search" placeholder="Search headline, summary, body... (press /)" />
+    <div class="section-label">[ FILTER MATRIX ]</div>
+    <div class="filters-row">
+      <input id="search" type="search" placeholder="SEARCH HEADLINE / SUMMARY / BODY ... (/)" />
 
-    <select id="newspaper">
-      <option value="">All newspapers</option>
-    </select>
+      <select id="newspaper">
+        <option value="">ALL NEWSPAPERS</option>
+      </select>
 
-    <select id="category">
-      <option value="">All categories</option>
-    </select>
+      <select id="category">
+        <option value="">ALL CATEGORIES</option>
+      </select>
 
-    <select id="topic">
-      <option value="">All topics</option>
-    </select>
+      <select id="topic">
+        <option value="">ALL TOPICS</option>
+      </select>
 
-    <label class="date-label">
-      From
-      <input id="dateFrom" type="date" />
-    </label>
-    <label class="date-label">
-      To
-      <input id="dateTo" type="date" />
-    </label>
+      <label class="date-label">
+        FROM
+        <input id="dateFrom" type="date" />
+      </label>
+      <label class="date-label">
+        TO
+        <input id="dateTo" type="date" />
+      </label>
 
-    <label class="checkbox-label">
-      <input id="unreadOnly" type="checkbox" />
-      Unread only
-    </label>
+      <label class="checkbox-label">
+        <input id="unreadOnly" type="checkbox" />
+        UNREAD ONLY
+      </label>
 
-    <button id="clearFilters" class="secondary">Clear filters</button>
+      <button id="clearFilters" class="secondary">CLEAR //</button>
+    </div>
   </section>
 
   <datalist id="categoryOptions"></datalist>
   <datalist id="topicOptions"></datalist>
 
+  <div class="section-label">[ ARTICLE FEED ]</div>
   <main id="list" class="article-list">
-    <p class="empty">Loading articles...</p>
+    <p class="empty">LOADING ARTICLES...</p>
   </main>
 
   <footer class="pagination">
-    <button id="prevPage" class="secondary">&laquo; Prev</button>
+    <button id="prevPage" class="secondary">&lt;&lt;&lt; PREV</button>
     <span id="pageInfo"></span>
-    <button id="nextPage" class="secondary">Next &raquo;</button>
+    <button id="nextPage" class="secondary">NEXT &gt;&gt;&gt;</button>
   </footer>
 
   <script src="app.js"></script>
