@@ -4,6 +4,7 @@
     GET   /api/articles               filterable, paginated article list
     GET   /api/articles/{id}          one article, full original text included
     PATCH /api/articles/{id}/read     mark an article read or unread
+    PATCH /api/articles/{id}/favorite mark an article a favorite, or not
     PATCH /api/articles/{id}/category set (or clear) an article's category
     PATCH /api/articles/{id}/topics   replace an article's topic tags
     GET   /api/newspapers             distinct newspapers with article counts
@@ -24,6 +25,7 @@ from ..models import Article, ArticleTopic, Newspaper, Topic
 from ..schemas import (
     ArticleCategoryUpdate,
     ArticleDetailOut,
+    ArticleFavoriteUpdate,
     ArticleListResponse,
     ArticleOut,
     ArticleReadUpdate,
@@ -70,6 +72,8 @@ def _to_article_out(article: Article) -> ArticleOut:
         published_at=article.published_at,
         read_at=article.read_at,
         is_read=article.read_at is not None,
+        favorited_at=article.favorited_at,
+        is_favorite=article.favorited_at is not None,
         topics=[
             TopicTagOut(
                 topic=link.topic.name,
@@ -201,6 +205,7 @@ def list_articles(
     date_to: date | None = Query(None, description="Published on or before this date"),
     q: str | None = Query(None, description="Search headline, summary, and body text"),
     unread_only: bool = Query(False, description="Only articles not yet marked read"),
+    favorite_only: bool = Query(False, description="Only articles marked as favorite"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=200),
     db: Session = Depends(get_db),
@@ -240,6 +245,8 @@ def list_articles(
         )
     if unread_only:
         stmt = stmt.where(Article.read_at.is_(None))
+    if favorite_only:
+        stmt = stmt.where(Article.favorited_at.is_not(None))
 
     count_stmt = select(func.count()).select_from(stmt.with_only_columns(Article.id).subquery())
     total = db.scalar(count_stmt) or 0
@@ -295,6 +302,27 @@ def set_read_status(
     if article is None:
         raise HTTPException(status_code=404, detail="Article not found")
     article.read_at = datetime.utcnow() if payload.read else None
+    db.commit()
+    db.refresh(article)
+    return _to_article_out(article)
+
+
+@router.patch("/articles/{article_id}/favorite", response_model=ArticleOut)
+def set_favorite_status(
+    article_id: int, payload: ArticleFavoriteUpdate, db: Session = Depends(get_db)
+) -> ArticleOut:
+    """Mark one article a favorite (payload.favorite=true), or not (false)."""
+    article = db.scalar(
+        select(Article)
+        .options(
+            selectinload(Article.newspaper),
+            selectinload(Article.topic_links).selectinload(ArticleTopic.topic),
+        )
+        .where(Article.id == article_id)
+    )
+    if article is None:
+        raise HTTPException(status_code=404, detail="Article not found")
+    article.favorited_at = datetime.utcnow() if payload.favorite else None
     db.commit()
     db.refresh(article)
     return _to_article_out(article)

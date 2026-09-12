@@ -155,6 +155,11 @@ class Article(Base):
     read_at: Mapped[datetime | None] = mapped_column(
         DateTime, nullable=True, index=True
     )
+    # NULL = not a favorite. Set to the time it was favorited; cleared to
+    # unfavorite. Indexed because "favorites only" is a common list filter.
+    favorited_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()

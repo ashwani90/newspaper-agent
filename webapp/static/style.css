@@ -560,7 +560,6 @@ body {
 }
 
 .mark-read-btn {
-  margin-left: auto;
   background: transparent;
   color: var(--ink-soft);
   font-weight: 600;
@@ -575,6 +574,43 @@ body {
 .mark-read-btn:hover {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+.favorite-btn {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: 50%;
+  border: 1px solid var(--hairline);
+  background: transparent;
+  color: var(--ink-faint);
+  cursor: pointer;
+  transition: color 300ms var(--ease), border-color 300ms var(--ease), transform 300ms var(--ease);
+}
+
+.favorite-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  transform: scale(1.06);
+}
+
+.favorite-btn svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+}
+
+.favorite-btn.is-favorite {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.favorite-btn.is-favorite svg {
+  fill: var(--accent);
 }
 
 .eyebrow-row {

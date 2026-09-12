@@ -14,6 +14,7 @@ const state = {
     date_to: "",
     q: "",
     unread_only: true,
+    favorite_only: false,
   },
 };
 
@@ -27,6 +28,7 @@ const els = {
   dateFrom: document.getElementById("dateFrom"),
   dateTo: document.getElementById("dateTo"),
   unreadOnly: document.getElementById("unreadOnly"),
+  favoriteOnly: document.getElementById("favoriteOnly"),
   clearFilters: document.getElementById("clearFilters"),
   prevPage: document.getElementById("prevPage"),
   nextPage: document.getElementById("nextPage"),
@@ -175,6 +177,17 @@ function renderCard(article) {
     ${article.byline ? `<span>${escapeHtml(article.byline)}</span>` : ""}
     ${article.is_read ? '<span class="read-badge">Read</span>' : ""}
   `;
+  const favoriteBtn = document.createElement("button");
+  favoriteBtn.className = "favorite-btn" + (article.is_favorite ? " is-favorite" : "");
+  favoriteBtn.setAttribute(
+    "aria-label",
+    article.is_favorite ? "Remove from favorites" : "Add to favorites"
+  );
+  favoriteBtn.innerHTML =
+    '<svg viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.6 6.1.7-4.5 4.3 1.2 6-5.4-3-5.4 3 1.2-6-4.5-4.3 6.1-.7z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>';
+  favoriteBtn.addEventListener("click", () => toggleFavorite(article.id, !article.is_favorite));
+  meta.appendChild(favoriteBtn);
+
   const markBtn = document.createElement("button");
   markBtn.className = "mark-read-btn";
   markBtn.textContent = article.is_read ? "Mark unread" : "Mark read";
@@ -405,6 +418,31 @@ async function toggleRead(id, read) {
   }
 }
 
+async function toggleFavorite(id, favorite) {
+  try {
+    await fetchJSON(`${API}/articles/${id}/favorite`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ favorite }),
+    });
+    if (state.filters.favorite_only && !favorite) {
+      // The card no longer belongs in a favorites-only view -- drop it and
+      // reload so pagination counts stay correct.
+      loadArticles();
+    } else {
+      const card = els.list.querySelector(`[data-id="${id}"]`);
+      const btn = card && card.querySelector(".favorite-btn");
+      if (btn) {
+        btn.classList.toggle("is-favorite", favorite);
+        btn.setAttribute("aria-label", favorite ? "Remove from favorites" : "Add to favorites");
+      }
+    }
+  } catch (err) {
+    console.error("Failed to update favorite status", err);
+    alert(`Could not update favorite status: ${err.message}`);
+  }
+}
+
 async function loadArticles() {
   els.list.innerHTML = '<p class="empty">Loading...</p>';
   const params = qs({
@@ -446,6 +484,7 @@ function applyFiltersFromInputs() {
     date_to: els.dateTo.value,
     q: els.search.value.trim(),
     unread_only: els.unreadOnly.checked,
+    favorite_only: els.favoriteOnly.checked,
   };
   state.page = 1;
   loadArticles();
@@ -461,6 +500,7 @@ els.topic.addEventListener("change", applyFiltersFromInputs);
 els.dateFrom.addEventListener("change", applyFiltersFromInputs);
 els.dateTo.addEventListener("change", applyFiltersFromInputs);
 els.unreadOnly.addEventListener("change", applyFiltersFromInputs);
+els.favoriteOnly.addEventListener("change", applyFiltersFromInputs);
 
 els.clearFilters.addEventListener("click", () => {
   els.search.value = "";
@@ -470,6 +510,7 @@ els.clearFilters.addEventListener("click", () => {
   els.dateFrom.value = "";
   els.dateTo.value = "";
   els.unreadOnly.checked = false;
+  els.favoriteOnly.checked = false;
   applyFiltersFromInputs();
 });
 

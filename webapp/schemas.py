@@ -78,6 +78,8 @@ class ArticleOut(BaseModel):
     published_at: datetime | None
     read_at: datetime | None = None
     is_read: bool = False
+    favorited_at: datetime | None = None
+    is_favorite: bool = False
     topics: list[TopicTagOut] = Field(default_factory=list)
 
 
@@ -88,6 +90,10 @@ class ArticleDetailOut(ArticleOut):
 
 class ArticleReadUpdate(BaseModel):
     read: bool
+
+
+class ArticleFavoriteUpdate(BaseModel):
+    favorite: bool
 
 
 class ArticleCategoryUpdate(BaseModel):

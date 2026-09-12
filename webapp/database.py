@@ -33,6 +33,7 @@ SessionLocal = sessionmaker(bind=_engine, future=True, expire_on_commit=False)
 _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
     # (table, column, DDL type)
     ("articles", "read_at", "TIMESTAMP NULL"),
+    ("articles", "favorited_at", "TIMESTAMP NULL"),
     # Added when the CLI (newsagent) moved from its own SQLite store onto
     # this database directly -- see newsagent/db.py.
     ("newspapers", "pdf_path", "TEXT NULL"),
