@@ -328,6 +328,97 @@ body {
   padding: 8px 12px;
 }
 
+/* ---- Searchable dropdown (Newspaper / Category) --------------------------- */
+
+.combo {
+  position: relative;
+}
+
+.combo select[hidden] {
+  display: none;
+}
+
+.combo-input {
+  width: 100%;
+  border: 1px solid var(--hairline);
+  border-radius: 13px;
+  background: var(--bg-elevated);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 13px;
+  padding: 8px 12px;
+  cursor: text;
+}
+
+.combo-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.combo-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 6;
+  max-height: 240px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px;
+  border: 1px solid var(--hairline);
+  border-radius: 14px;
+  /* Opaque, not the translucent + backdrop-blur "glass" used elsewhere --
+     this is a dense scrollable list, and blurring the filter rows behind it
+     showed through as ghosted lines across the option text. */
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-float);
+}
+
+.combo-menu[hidden] {
+  display: none;
+}
+
+.combo-option {
+  display: block;
+  width: 100%;
+  /* Without this, the flex column shrinks every row to fit them all inside
+     .combo-menu's max-height instead of overflowing and scrolling -- with
+     50+ options that compresses each row to a few px tall, smearing the
+     text into an illegible blur. */
+  flex-shrink: 0;
+  text-align: left;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-family: var(--font-body);
+  font-size: 13px;
+  padding: 7px 10px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.combo-option:hover,
+.combo-option.is-active {
+  background: var(--bg-elevated);
+  color: var(--ink);
+}
+
+.combo-option.is-selected {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.combo-empty {
+  padding: 8px 10px;
+  font-size: 12.5px;
+  color: var(--ink-faint);
+}
+
 .date-row {
   display: flex;
   gap: 6px;

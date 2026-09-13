@@ -40,7 +40,142 @@ const els = {
   entityChip: document.getElementById("entityChip"),
   entityChipLabel: document.getElementById("entityChipLabel"),
   entityChipClear: document.getElementById("entityChipClear"),
+  newspaperSearch: document.getElementById("newspaperSearch"),
+  newspaperMenu: document.getElementById("newspaperMenu"),
+  categorySearch: document.getElementById("categorySearch"),
+  categoryMenu: document.getElementById("categoryMenu"),
+  topicSearch: document.getElementById("topicSearch"),
+  topicMenu: document.getElementById("topicMenu"),
 };
+
+// Searchable dropdown: a plain <select> stays in the DOM (hidden) as the
+// source of truth -- every existing bit of code that reads els.newspaper /
+// els.category .value or .options, or listens for their "change" event,
+// keeps working untouched. The visible text input + popup list are a layer
+// on top that filters those same <option> elements and, on a pick, sets
+// select.value and dispatches a real "change" event.
+function makeSearchableSelect(select, input, menu) {
+  let activeIndex = -1;
+
+  function labelFor(value) {
+    const opt = Array.from(select.options).find((o) => o.value === value);
+    return opt ? opt.textContent : "";
+  }
+
+  // Newspaper names are PDF filenames ("The_Times_Of_India_Delhi_..."), so a
+  // natural search like "times of india" needs underscores treated as
+  // spaces on both sides of the comparison to match.
+  function normalise(text) {
+    return text.toLowerCase().replace(/[_-]+/g, " ");
+  }
+
+  function currentOptions(query) {
+    const q = normalise((query || "").trim());
+    return Array.from(select.options).filter((opt) => {
+      if (opt.value === "") return true; // "All ..." always available
+      return !q || normalise(opt.textContent).includes(q);
+    });
+  }
+
+  function renderMenu(query) {
+    const options = currentOptions(query);
+    menu.innerHTML = "";
+    activeIndex = -1;
+    if (!options.length) {
+      menu.innerHTML = '<div class="combo-empty">No matches</div>';
+      return;
+    }
+    options.forEach((opt, index) => {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className =
+        "combo-option" + (opt.value === select.value ? " is-selected" : "");
+      item.textContent = opt.textContent;
+      item.setAttribute("role", "option");
+      // mousedown (not click) fires before the input's blur, so the pick
+      // registers before the blur handler would otherwise close the menu.
+      item.addEventListener("mousedown", (event) => {
+        event.preventDefault();
+        pick(opt.value);
+      });
+      item.addEventListener("mouseenter", () => setActive(index));
+      menu.appendChild(item);
+    });
+  }
+
+  function setActive(index) {
+    const items = Array.from(menu.querySelectorAll(".combo-option"));
+    items.forEach((el, i) => el.classList.toggle("is-active", i === index));
+    activeIndex = index;
+  }
+
+  function pick(value) {
+    select.value = value;
+    input.value = labelFor(value);
+    closeMenu();
+    select.dispatchEvent(new Event("change"));
+  }
+
+  function openMenu() {
+    renderMenu(input.value === labelFor(select.value) ? "" : input.value);
+    menu.hidden = false;
+    input.setAttribute("aria-expanded", "true");
+  }
+
+  function closeMenu() {
+    menu.hidden = true;
+    input.setAttribute("aria-expanded", "false");
+  }
+
+  input.addEventListener("focus", () => {
+    input.select();
+    openMenu();
+  });
+  input.addEventListener("input", () => {
+    openMenu();
+    renderMenu(input.value);
+  });
+  input.addEventListener("blur", () => {
+    // Deferred so a mousedown-selected option (see above) still lands first.
+    setTimeout(() => {
+      input.value = labelFor(select.value);
+      closeMenu();
+    }, 120);
+  });
+  input.addEventListener("keydown", (event) => {
+    const items = () => Array.from(menu.querySelectorAll(".combo-option"));
+    if (event.key === "Escape") {
+      input.value = labelFor(select.value);
+      closeMenu();
+      input.blur();
+    } else if (event.key === "ArrowDown") {
+      event.preventDefault();
+      if (menu.hidden) {
+        openMenu();
+        return;
+      }
+      setActive(Math.min(activeIndex + 1, items().length - 1));
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActive(Math.max(activeIndex - 1, 0));
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      const options = currentOptions(
+        input.value === labelFor(select.value) ? "" : input.value
+      );
+      const target = activeIndex >= 0 ? options[activeIndex] : options[0];
+      if (target) pick(target.value);
+    }
+  });
+
+  input.value = labelFor(select.value);
+
+  return { sync: () => { input.value = labelFor(select.value); } };
+}
+
+const newspaperCombo = makeSearchableSelect(els.newspaper, els.newspaperSearch, els.newspaperMenu);
+const categoryCombo = makeSearchableSelect(els.category, els.categorySearch, els.categoryMenu);
+const topicCombo = makeSearchableSelect(els.topic, els.topicSearch, els.topicMenu);
 
 // Theme: an explicit choice is saved and always wins; with no saved choice,
 // the OS preference (prefers-color-scheme, handled in CSS) applies instead --
@@ -532,6 +667,9 @@ els.clearFilters.addEventListener("click", () => {
   els.unreadOnly.checked = false;
   els.favoriteOnly.checked = false;
   state.filters.entity = "";
+  newspaperCombo.sync();
+  categoryCombo.sync();
+  topicCombo.sync();
   applyFiltersFromInputs();
 });
 
@@ -556,8 +694,24 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
+// Local YYYY-MM-DD, the format <input type="date"> expects -- not UTC, so
+// this matches the date the user actually sees on their own clock.
+function todayISO() {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 async function init() {
   await loadFilterOptions();
+
+  // Date range defaults to today; "Clear filters" still blanks it back out
+  // to "every date" like any other filter.
+  const today = todayISO();
+  // els.dateFrom.value = today;
+  // els.dateTo.value = today;
 
   // Deep link from /tags: "?category=Name", "?topic=Name" or "?entity=Name"
   // preselects that filter and switches off "unread only" so an
@@ -567,27 +721,23 @@ async function init() {
   const categoryParam = params.get("category");
   const topicParam = params.get("topic");
   const entityParam = params.get("entity");
-  let matched = false;
 
   if (categoryParam && Array.from(els.category.options).some((opt) => opt.value === categoryParam)) {
     els.category.value = categoryParam;
-    matched = true;
+    categoryCombo.sync();
+    els.unreadOnly.checked = false;
   }
   if (topicParam && Array.from(els.topic.options).some((opt) => opt.value === topicParam)) {
     els.topic.value = topicParam;
-    matched = true;
+    topicCombo.sync();
+    els.unreadOnly.checked = false;
   }
   if (entityParam) {
     state.filters.entity = entityParam;
-    matched = true;
+    els.unreadOnly.checked = false;
   }
 
-  if (matched) {
-    els.unreadOnly.checked = false;
-    applyFiltersFromInputs();
-  } else {
-    loadArticles();
-  }
+  applyFiltersFromInputs();
 }
 
 init();

@@ -59,19 +59,58 @@
         </div>
 
         <label class="field-label">Newspaper</label>
-        <select id="newspaper">
-          <option value="">All newspapers</option>
-        </select>
+        <div class="combo">
+          <input
+            type="text"
+            id="newspaperSearch"
+            class="combo-input"
+            placeholder="All newspapers"
+            autocomplete="off"
+            role="combobox"
+            aria-expanded="false"
+            aria-controls="newspaperMenu"
+          />
+          <select id="newspaper" hidden>
+            <option value="">All newspapers</option>
+          </select>
+          <div class="combo-menu" id="newspaperMenu" role="listbox" hidden></div>
+        </div>
 
         <label class="field-label">Category</label>
-        <select id="category">
-          <option value="">All categories</option>
-        </select>
+        <div class="combo">
+          <input
+            type="text"
+            id="categorySearch"
+            class="combo-input"
+            placeholder="All categories"
+            autocomplete="off"
+            role="combobox"
+            aria-expanded="false"
+            aria-controls="categoryMenu"
+          />
+          <select id="category" hidden>
+            <option value="">All categories</option>
+          </select>
+          <div class="combo-menu" id="categoryMenu" role="listbox" hidden></div>
+        </div>
 
         <label class="field-label">Topic</label>
-        <select id="topic">
-          <option value="">All topics</option>
-        </select>
+        <div class="combo">
+          <input
+            type="text"
+            id="topicSearch"
+            class="combo-input"
+            placeholder="All topics"
+            autocomplete="off"
+            role="combobox"
+            aria-expanded="false"
+            aria-controls="topicMenu"
+          />
+          <select id="topic" hidden>
+            <option value="">All topics</option>
+          </select>
+          <div class="combo-menu" id="topicMenu" role="listbox" hidden></div>
+        </div>
 
         <div class="entity-chip" id="entityChip" hidden>
           <span id="entityChipLabel"></span>
