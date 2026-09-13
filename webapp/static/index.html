@@ -33,6 +33,7 @@
     </div>
     <div class="masthead-actions">
       <div class="stats" id="stats"></div>
+      <a href="/tags" class="btn btn--ghost">Entities</a>
       <button id="themeToggle" class="theme-toggle" aria-label="Toggle dark mode">
         <svg class="icon-sun" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <circle cx="12" cy="12" r="4.5" stroke="currentColor" stroke-width="1.5" />
@@ -71,6 +72,11 @@
         <select id="topic">
           <option value="">All topics</option>
         </select>
+
+        <div class="entity-chip" id="entityChip" hidden>
+          <span id="entityChipLabel"></span>
+          <button type="button" id="entityChipClear" aria-label="Clear entity filter">&times;</button>
+        </div>
 
         <label class="field-label">Date range</label>
         <div class="date-row">

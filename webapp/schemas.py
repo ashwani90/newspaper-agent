@@ -134,3 +134,8 @@ class TopicOut(BaseModel):
     id: int
     name: str
     article_count: int
+
+
+class EntityOut(BaseModel):
+    entity: str
+    count: int

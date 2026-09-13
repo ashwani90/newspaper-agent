@@ -358,6 +358,50 @@ body {
   accent-color: var(--accent);
 }
 
+.entity-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-ink);
+  border-radius: 13px;
+  padding: 8px 8px 8px 12px;
+  margin-top: 4px;
+}
+
+.entity-chip[hidden] {
+  display: none;
+}
+
+.entity-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.entity-chip button {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--accent);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.entity-chip button:hover {
+  background: var(--bg-elevated);
+}
+
 .btn--block {
   width: 100%;
   margin-top: 6px;
@@ -765,6 +809,99 @@ body {
 .original-text.loading {
   color: var(--ink-faint);
   font-style: italic;
+}
+
+/* ---- Tags page (ranked list) ------------------------------------------------ */
+
+.tags-toolbar {
+  max-width: 760px;
+  margin: 24px auto 0;
+  padding: 0 24px;
+}
+
+.tags-toolbar .filters-search {
+  margin-bottom: 0;
+}
+
+.tags-list {
+  max-width: 760px;
+  margin: 14px auto 60px;
+  padding: 0 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tags-item {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 20px;
+  background: var(--glass-elevated);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-sm);
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 300ms var(--ease), transform 300ms var(--ease), box-shadow 300ms var(--ease);
+}
+
+.tags-item:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-float);
+}
+
+.tags-bar {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.tags-bar-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--accent-ink);
+  border-radius: var(--radius-card);
+}
+
+.tags-rank {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  width: 26px;
+  text-align: right;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-faint);
+}
+
+.tags-name {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 17px;
+  color: var(--ink);
+}
+
+.tags-count {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+  background: var(--bg-elevated);
+  padding: 3px 12px;
+  border-radius: var(--radius-pill);
 }
 
 /* ---- Pagination -------------------------------------------------------------- */

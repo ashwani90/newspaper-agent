@@ -17,7 +17,7 @@ from __future__ import annotations
 from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, true
 from sqlalchemy.orm import Session, selectinload
 
 from ..database import get_db
@@ -33,6 +33,7 @@ from ..schemas import (
     BulkIngestRequest,
     BulkIngestResponse,
     CategoryOut,
+    EntityOut,
     NewspaperOut,
     TopicOut,
     TopicTagOut,
@@ -201,6 +202,7 @@ def list_articles(
     ),
     category: str | None = Query(None, description="Filter by category (exact)"),
     topic: str | None = Query(None, description="Filter by topic name (exact)"),
+    entity: str | None = Query(None, description="Filter by entity name (exact)"),
     date_from: date | None = Query(None, description="Published on or after this date"),
     date_to: date | None = Query(None, description="Published on or before this date"),
     q: str | None = Query(None, description="Search headline, summary, and body text"),
@@ -226,6 +228,8 @@ def list_articles(
             .join(Topic, Topic.id == ArticleTopic.topic_id)
             .where(Topic.name.ilike(topic))
         )
+    if entity:
+        stmt = stmt.where(Article.entities.contains([entity]))
     if date_from:
         stmt = stmt.where(
             Article.published_at >= datetime.combine(date_from, datetime.min.time())
@@ -433,3 +437,22 @@ def list_topics(db: Session = Depends(get_db)) -> list[TopicOut]:
         .order_by(func.count(ArticleTopic.id).desc())
     ).all()
     return [TopicOut(id=r[0], name=r[1], article_count=r[2]) for r in rows]
+
+
+@router.get("/entities", response_model=list[EntityOut])
+def list_entities(db: Session = Depends(get_db)) -> list[EntityOut]:
+    """Distinct entity names across all articles, with how many articles
+    mention each -- unlike category/topic, entities aren't a normalised
+    table, just a JSONB list per article, so this unnests it in Postgres
+    (jsonb_array_elements_text) rather than pulling every row into Python.
+    """
+    unnested = func.jsonb_array_elements_text(Article.entities).table_valued("value")
+    count_expr = func.count(unnested.c.value)
+    rows = db.execute(
+        select(unnested.c.value, count_expr)
+        .select_from(Article)
+        .join(unnested, true())
+        .group_by(unnested.c.value)
+        .order_by(count_expr.desc())
+    ).all()
+    return [EntityOut(entity=r[0], count=r[1]) for r in rows]

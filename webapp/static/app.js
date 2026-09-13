@@ -10,6 +10,7 @@ const state = {
     newspaper: "",
     category: "",
     topic: "",
+    entity: "",
     date_from: "",
     date_to: "",
     q: "",
@@ -36,6 +37,9 @@ const els = {
   categoryOptions: document.getElementById("categoryOptions"),
   topicOptions: document.getElementById("topicOptions"),
   themeToggle: document.getElementById("themeToggle"),
+  entityChip: document.getElementById("entityChip"),
+  entityChipLabel: document.getElementById("entityChipLabel"),
+  entityChipClear: document.getElementById("entityChipClear"),
 };
 
 // Theme: an explicit choice is saved and always wins; with no saved choice,
@@ -475,11 +479,15 @@ function updatePagination() {
   els.nextPage.disabled = state.page >= totalPages;
 }
 
+// Entity isn't backed by a <select> (there are too many, free-form, to list)
+// -- it only ever arrives via a /tags deep link -- so it's carried forward
+// from the existing state rather than read from a form element here.
 function applyFiltersFromInputs() {
   state.filters = {
     newspaper: els.newspaper.value,
     category: els.category.value,
     topic: els.topic.value,
+    entity: state.filters.entity,
     date_from: els.dateFrom.value,
     date_to: els.dateTo.value,
     q: els.search.value.trim(),
@@ -487,8 +495,20 @@ function applyFiltersFromInputs() {
     favorite_only: els.favoriteOnly.checked,
   };
   state.page = 1;
+  updateEntityChip();
   loadArticles();
 }
+
+function updateEntityChip() {
+  const active = Boolean(state.filters.entity);
+  els.entityChip.hidden = !active;
+  els.entityChipLabel.textContent = active ? `Entity: ${state.filters.entity}` : "";
+}
+
+els.entityChipClear.addEventListener("click", () => {
+  state.filters.entity = "";
+  applyFiltersFromInputs();
+});
 
 els.search.addEventListener("input", () => {
   clearTimeout(searchDebounce);
@@ -511,6 +531,7 @@ els.clearFilters.addEventListener("click", () => {
   els.dateTo.value = "";
   els.unreadOnly.checked = false;
   els.favoriteOnly.checked = false;
+  state.filters.entity = "";
   applyFiltersFromInputs();
 });
 
@@ -535,5 +556,38 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-loadFilterOptions();
-loadArticles();
+async function init() {
+  await loadFilterOptions();
+
+  // Deep link from /tags: "?category=Name", "?topic=Name" or "?entity=Name"
+  // preselects that filter and switches off "unread only" so an
+  // already-fully-read category/topic/entity still shows its articles
+  // instead of an empty list.
+  const params = new URLSearchParams(window.location.search);
+  const categoryParam = params.get("category");
+  const topicParam = params.get("topic");
+  const entityParam = params.get("entity");
+  let matched = false;
+
+  if (categoryParam && Array.from(els.category.options).some((opt) => opt.value === categoryParam)) {
+    els.category.value = categoryParam;
+    matched = true;
+  }
+  if (topicParam && Array.from(els.topic.options).some((opt) => opt.value === topicParam)) {
+    els.topic.value = topicParam;
+    matched = true;
+  }
+  if (entityParam) {
+    state.filters.entity = entityParam;
+    matched = true;
+  }
+
+  if (matched) {
+    els.unreadOnly.checked = false;
+    applyFiltersFromInputs();
+  } else {
+    loadArticles();
+  }
+}
+
+init();

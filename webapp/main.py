@@ -94,5 +94,13 @@ def index() -> HTMLResponse:
     return HTMLResponse(html, headers={"Cache-Control": "no-cache, must-revalidate"})
 
 
+@app.get("/tags", include_in_schema=False)
+def tags_page() -> HTMLResponse:
+    """Ranked list of topics by article count -- see webapp/static/tags.html."""
+    html = (STATIC_DIR / "tags.html").read_text(encoding="utf-8")
+    html = html.replace('href="style.css"', f'href="style.css?v={ASSET_VERSION}"')
+    return HTMLResponse(html, headers={"Cache-Control": "no-cache, must-revalidate"})
+
+
 # Mounted last so it does not shadow /, /api/*, or /health.
 app.mount("/", NoCacheStaticFiles(directory=STATIC_DIR, html=True), name="static")

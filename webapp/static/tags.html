@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Entities &middot; Newspaper Agent</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,500&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="style.css" />
+  <script>
+    // Applied before first paint so there is no flash of the wrong theme.
+    (function () {
+      try {
+        var saved = localStorage.getItem("theme");
+        if (saved === "dark" || saved === "light") {
+          document.documentElement.setAttribute("data-theme", saved);
+        }
+      } catch (e) {}
+    })();
+  </script>
+</head>
+<body>
+  <div class="grain" aria-hidden="true"></div>
+
+  <header class="masthead">
+    <div class="masthead-brand">
+      <h1>Newspaper Agent</h1>
+      <span class="eyebrow eyebrow--muted">Entities &middot; Ranked by Mentions</span>
+    </div>
+    <div class="masthead-actions">
+      <div class="stats" id="tagsStats"></div>
+      <a href="/" class="btn btn--ghost">&larr; Digest</a>
+      <button id="themeToggle" class="theme-toggle" aria-label="Toggle dark mode">
+        <svg class="icon-sun" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="12" cy="12" r="4.5" stroke="currentColor" stroke-width="1.5" />
+          <path d="M12 2.5v2.5M12 19v2.5M4.2 4.2l1.8 1.8M18 18l1.8 1.8M2.5 12H5M19 12h2.5M4.2 19.8L6 18M18 6l1.8-1.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+        </svg>
+        <svg class="icon-moon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.8 6.8 0 0 0 10.5 10.5z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="tags-toolbar">
+    <div class="filters-search">
+      <svg class="icon-search" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.5" />
+        <path d="M20 20L16.5 16.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+      </svg>
+      <input id="entitySearch" type="search" placeholder="Filter entities&hellip;" />
+      <span class="kbd">/</span>
+    </div>
+  </div>
+
+  <main class="tags-list" id="tagsList">
+    <p class="empty">Loading entities&hellip;</p>
+  </main>
+
+  <script>
+    // Same toggle behaviour as the digest page's masthead (kept as its own
+    // small copy here rather than pulling in all of app.js, which expects
+    // the digest page's filter/list elements to exist).
+    document.getElementById("themeToggle").addEventListener("click", () => {
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      const current = document.documentElement.getAttribute("data-theme") || (prefersDark ? "dark" : "light");
+      const next = current === "dark" ? "light" : "dark";
+      document.documentElement.setAttribute("data-theme", next);
+      try {
+        localStorage.setItem("theme", next);
+      } catch (err) {
+        // Private window or site data blocked -- the toggle still works for
+        // this page load, it just won't be remembered.
+      }
+    });
+
+    function escapeHtml(str) {
+      const div = document.createElement("div");
+      div.textContent = str ?? "";
+      return div.innerHTML;
+    }
+
+    let allEntities = [];
+    let maxCount = 1;
+    let searchDebounce = null;
+
+    const list = document.getElementById("tagsList");
+    const stats = document.getElementById("tagsStats");
+    const searchInput = document.getElementById("entitySearch");
+
+    function renderList(entities, query) {
+      if (!entities.length) {
+        list.innerHTML = query
+          ? `<p class="empty">No entities match &ldquo;${escapeHtml(query)}&rdquo;.</p>`
+          : '<p class="empty">No entities yet.</p>';
+        return;
+      }
+      list.innerHTML = "";
+      entities.forEach((ent) => {
+        // Rank shown is the entity's standing in the full ranked list, not
+        // its position within a filtered subset.
+        const pct = Math.max(2, Math.round((ent.count / maxCount) * 100));
+        const row = document.createElement("a");
+        row.className = "tags-item";
+        row.href = `/?entity=${encodeURIComponent(ent.entity)}`;
+        row.innerHTML = `
+          <span class="tags-bar"><span class="tags-bar-fill" style="width:${pct}%"></span></span>
+          <span class="tags-rank">${ent.rank}</span>
+          <span class="tags-name">${escapeHtml(ent.entity)}</span>
+          <span class="tags-count">${ent.count}</span>
+        `;
+        list.appendChild(row);
+      });
+    }
+
+    function updateStats(filtered, query) {
+      if (!query) {
+        const totalMentions = allEntities.reduce((sum, e) => sum + e.count, 0);
+        stats.textContent = `${allEntities.length} entities across ${totalMentions} mention(s)`;
+        return;
+      }
+      stats.textContent = `${filtered.length} of ${allEntities.length} entities match "${query}"`;
+    }
+
+    function applySearch() {
+      const query = searchInput.value.trim();
+      const filtered = query
+        ? allEntities.filter((e) => e.entity.toLowerCase().includes(query.toLowerCase()))
+        : allEntities;
+      renderList(filtered, query);
+      updateStats(filtered, query);
+    }
+
+    searchInput.addEventListener("input", () => {
+      clearTimeout(searchDebounce);
+      searchDebounce = setTimeout(applySearch, 150);
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "/" && document.activeElement !== searchInput) {
+        e.preventDefault();
+        searchInput.focus();
+      }
+    });
+
+    (async function loadEntities() {
+      try {
+        const res = await fetch("/api/entities");
+        if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+        // The API already orders by mention count descending; sort again
+        // here anyway so this page doesn't depend on that staying true.
+        allEntities = (await res.json())
+          .sort((a, b) => b.count - a.count)
+          .map((e, i) => ({ ...e, rank: i + 1 }));
+        maxCount = allEntities.length ? allEntities[0].count || 1 : 1;
+        updateStats(allEntities, "");
+        renderList(allEntities, "");
+      } catch (err) {
+        list.innerHTML = `<p class="empty">Failed to load entities: ${escapeHtml(err.message)}</p>`;
+      }
+    })();
+  </script>
+</body>
+</html>
