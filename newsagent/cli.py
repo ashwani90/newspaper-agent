@@ -136,17 +136,27 @@ def cmd_prompt(args: argparse.Namespace) -> int:
 
     failed = False
     for pdf in targets:
-        report = prepare_edition(
-            pdf,
-            max_pages=args.max_pages,
-            max_chars=args.max_chars,
-            pages_per_chunk=args.pages_per_chunk,
-            include_layout=args.include_layout,
-            pages=args.pages,
-            skip_pages=args.skip_pages,
-            skip_junk=args.skip_junk,
-            progress=_progress,
-        )
+        try:
+            report = prepare_edition(
+                pdf,
+                max_pages=args.max_pages,
+                max_chars=args.max_chars,
+                pages_per_chunk=args.pages_per_chunk,
+                include_layout=args.include_layout,
+                pages=args.pages,
+                skip_pages=args.skip_pages,
+                skip_junk=args.skip_junk,
+                progress=_progress,
+            )
+        except PageSpecError as exc:
+            # A page range that fits one PDF in a batch may not fit another
+            # (different page counts) -- report it and keep going instead of
+            # aborting the whole run, which would silently skip every PDF
+            # after the one that failed.
+            console.print()
+            console.print(f"[red]{pdf.name}: bad page selection -- {exc}[/red]")
+            failed = True
+            continue
         console.print()
         console.print(
             Panel(

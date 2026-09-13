@@ -133,6 +133,8 @@ SUMMARY: the whole article in one sentence under 30 words
 BULLET: a key point in one sentence
 BULLET: another key point
 BULLET: another key point
+BULLET: another key point (optional)
+BULLET: another key point (optional)
 ENTITIES: Person One, Organisation Two, Place Three
 WHY: one sentence on why it matters, or omit if the article does not support one
 TOPIC: Exact Topic Name | 0.95 | short reason this article matches
