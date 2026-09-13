@@ -54,21 +54,35 @@ article, even in the same column. A short item under its own headline still
 counts -- include it. If an article is continued from an earlier page or runs
 off the bottom, report it and set CONTINUED: yes.
 
+WHAT COUNTS AS A TABLE
+A page sometimes carries a genuine data table instead of, or alongside,
+articles -- stock and commodity prices, exchange rates, market summaries,
+sports scorecards, points tables, fixtures and results, weather tables, or a
+financial/statistical table embedded in a story. Do not transcribe it row by
+row. Instead report ONE TABLE block per table (see OUTPUT FORMAT below) that
+explains, in plain language, what the table shows and what it means -- e.g.
+"the Sensex and Nifty closed higher for the third straight session, led by
+banking stocks" rather than a row-by-row readout. Several small tables that
+clearly belong to the same subject (e.g. today's closing levels for a handful
+of indices) can share one TABLE block.
+
+Tide tables, prayer times, lottery-number listings, and exam-result roll
+numbers carry no meaning beyond the raw numbers themselves -- leave those out
+entirely, same as the other listings below.
+
 WHAT TO LEAVE OUT ENTIRELY
 Skip all of the following. Do not summarise them, do not report them as
-articles, and do not mention them in your reply:
+articles or tables, and do not mention them in your reply:
 - Advertisements and advertorials, including full-page ads and anything
   marked "sponsored", "promotional feature" or "terms and conditions apply".
 - Classifieds of every kind: matrimonial, situations vacant, to let, for
   sale, property, vehicles, lost and found.
 - Public and legal notices: tenders, e-tenders, auction notices, change of
   name, court and company notices, statutory declarations.
-- Any table or data listing: stock and commodity prices, exchange rates,
-  market summaries, sports scorecards, points tables, fixtures and results,
-  weather tables, tide and prayer times, lottery numbers, exam results.
 - Puzzles and light matter: crossword, sudoku, horoscope, comics, cartoons.
 - Listings: TV and radio schedules, cinema showtimes, event calendars,
-  train and flight timetables.
+  train and flight timetables, tide tables, prayer times, lottery numbers,
+  exam-result roll numbers.
 - Page furniture: the masthead, the running header or footer that repeats on
   every page, page numbers, section dividers, "continued on page N" pointers,
   index or contents boxes, subscription and contact panels, credits, and
@@ -76,9 +90,11 @@ articles, and do not mention them in your reply:
 - Obituary and birth/death announcement notices. (An obituary written as a
   reported feature about a notable person IS an article -- include that.)
 
-If a whole page turns out to be nothing but the above, reply with the single
-line NO ARTICLES ON THIS PAGE and nothing else. That is a correct and useful
-answer -- never invent an article to fill the space.
+If a whole page turns out to have neither an article nor an explainable
+table, reply with the single line NO ARTICLES ON THIS PAGE and nothing else.
+That is a correct and useful answer -- never invent an article or a table to
+fill the space. Do not write that line on a page where you are reporting one
+or more TABLE blocks.
 
 HOW TO SUMMARISE
 - Be concrete: names, numbers, dates, outcomes.
@@ -96,11 +112,13 @@ THE ANCHOR LINE
 For each article, ANCHOR must be the first 10-15 words of the article's body
 text, copied EXACTLY as they appear in the page text above (not the headline,
 not the byline -- the first words of the actual article). This is how the tool
-locates the full text, so it must be verbatim.
+locates the full text, so it must be verbatim. For a TABLE block, ANCHOR is
+instead 8-15 words copied verbatim from the table's own caption/title or the
+text introducing it -- whatever sits closest to the table on the page.
 
 OUTPUT FORMAT
-Reply with ONLY article blocks in exactly this shape. No preamble, no closing
-remarks, no markdown headings other than the ### markers.
+Reply with ONLY article and table blocks in exactly this shape. No preamble,
+no closing remarks, no markdown headings other than the ### markers.
 
 ### ARTICLE
 PAGE: 1
@@ -122,6 +140,16 @@ TOPIC: Exact Topic Name | 0.95 | short reason this article matches
 
 Repeat that block for every article. Use BULLET two to five times per article.
 Use TOPIC once per matching topic, and omit it entirely when nothing matches.
+
+When the page has a data table worth explaining (see WHAT COUNTS AS A TABLE
+above), ALSO report one block per table in this shape:
+
+### TABLE
+PAGE: 1
+CAPTION: short label for what the table is, e.g. "Sensex and Nifty closing levels"
+ANCHOR: 8-15 words copied verbatim from the table's caption or the text introducing it
+EXPLANATION: 1-3 plain-language sentences on what the table shows and what it means
+### END
 """
 
 
@@ -229,6 +257,7 @@ class ParsedArticle:
     entities: list[str] = field(default_factory=list)
     why: str | None = None
     topics: list[tuple[str, float, str]] = field(default_factory=list)
+    is_table: bool = False
 
     def is_usable(self) -> bool:
         return bool(self.headline.strip() and self.summary.strip())
@@ -246,18 +275,19 @@ class ParseResult:
 #   "- BULLET: foo"      ->  "BULLET: foo"
 _LEADING_JUNK = re.compile(r"^\s*(?:[-*+]\s+|\d+[.)]\s+)?[*_`]*\s*")
 _KEY_LINE = re.compile(
-    r"^(PAGE|HEADLINE|BYLINE|SECTION|CATEGORY|ANCHOR|READ_MINUTES|READ MINUTES"
-    r"|CONTINUED|SUMMARY|BULLET|BULLETS|ENTITIES|WHY|WHY_IT_MATTERS"
+    r"^(PAGE|HEADLINE|CAPTION|BYLINE|SECTION|CATEGORY|ANCHOR|READ_MINUTES|READ MINUTES"
+    r"|CONTINUED|SUMMARY|EXPLANATION|BULLET|BULLETS|ENTITIES|WHY|WHY_IT_MATTERS"
     r"|WHY IT MATTERS|TOPIC|TOPICS)\s*[:\-]\s*(.*)$",
     re.IGNORECASE,
 )
-_BLOCK_START = re.compile(r"^\s*#{2,4}\s*ARTICLE\b", re.IGNORECASE)
+_BLOCK_START = re.compile(r"^\s*#{2,4}\s*(ARTICLE|TABLE)\b", re.IGNORECASE)
 _BLOCK_END = re.compile(r"^\s*#{2,4}\s*END\b", re.IGNORECASE)
 _FENCE = re.compile(r"^\s*```")
 
 # The prompt tells the model to answer with "NO ARTICLES ON THIS PAGE" when a
-# page holds nothing but adverts, classifieds or tables. Matched loosely,
-# because models paraphrase the sentinel rather than echoing it exactly.
+# page holds nothing but adverts, classifieds, listings or an unexplainable
+# table. Matched loosely, because models paraphrase the sentinel rather than
+# echoing it exactly.
 _NO_ARTICLES = re.compile(
     r"\bno\s+(?:news\s+|real\s+|actual\s+)?articles?\b"
     r"[^.\n]{0,40}?"
@@ -321,9 +351,12 @@ def parse_response(raw: str) -> ParseResult:
         result.warnings.append("the response was empty")
         return result
 
-    # The prompt asks for this when a page is all adverts, classifieds or
-    # tables. It is a correct answer, so it must not be treated as a failure.
-    if _NO_ARTICLES.search(text) and "### ARTICLE" not in text.upper():
+    # The prompt asks for this when a page is all adverts, classifieds and
+    # listings with no explainable table either. It is a correct answer, so
+    # it must not be treated as a failure -- but not when a TABLE block is
+    # also present, since that means the page did have something to report.
+    upper = text.upper()
+    if _NO_ARTICLES.search(text) and "### ARTICLE" not in upper and "### TABLE" not in upper:
         result.format_seen = "no-articles"
         return result
 
@@ -343,11 +376,15 @@ def parse_response(raw: str) -> ParseResult:
     for line in text.split("\n"):
         if _FENCE.match(line):
             continue
-        if _BLOCK_START.match(line):
+        block_start = _BLOCK_START.match(line)
+        if block_start:
             saw_any_marker = True
             if current is not None and current.is_usable():
                 result.articles.append(_finalise(current))
             current = ParsedArticle()
+            if block_start.group(1).upper() == "TABLE":
+                current.is_table = True
+                current.category = "Table"
             continue
         if _BLOCK_END.match(line):
             if current is not None and current.is_usable():
@@ -376,7 +413,7 @@ def parse_response(raw: str) -> ParseResult:
             digits = re.search(r"\d+", value)
             if digits:
                 current.page = int(digits.group())
-        elif key == "HEADLINE":
+        elif key in {"HEADLINE", "CAPTION"}:
             current.headline = value
         elif key == "BYLINE":
             current.byline = value or None
@@ -392,7 +429,7 @@ def parse_response(raw: str) -> ParseResult:
                 current.read_minutes = int(digits.group())
         elif key == "CONTINUED":
             current.continued = value.strip().lower() in {"yes", "true", "y", "1"}
-        elif key == "SUMMARY":
+        elif key in {"SUMMARY", "EXPLANATION"}:
             current.summary = value
         elif key in {"BULLET", "BULLETS"}:
             if key == "BULLETS":
@@ -415,14 +452,16 @@ def parse_response(raw: str) -> ParseResult:
     if not result.articles:
         if saw_any_marker:
             result.warnings.append(
-                "found ### ARTICLE markers but no article had both a HEADLINE "
-                "and a SUMMARY line"
+                "found ### ARTICLE/TABLE markers but none had both a "
+                "HEADLINE/CAPTION and a SUMMARY/EXPLANATION line"
             )
         else:
             result.warnings.append(
-                "no article blocks found -- expected lines like '### ARTICLE' "
-                "then 'HEADLINE:' and 'SUMMARY:'. Check you pasted the whole "
-                "reply, and that the model followed the OUTPUT FORMAT section"
+                "no article or table blocks found -- expected lines like "
+                "'### ARTICLE' then 'HEADLINE:' and 'SUMMARY:' (or '### TABLE' "
+                "then 'CAPTION:' and 'EXPLANATION:'). Check you pasted the "
+                "whole reply, and that the model followed the OUTPUT FORMAT "
+                "section"
             )
 
     for article in result.articles:
@@ -431,7 +470,7 @@ def parse_response(raw: str) -> ParseResult:
                 f"no ANCHOR for {article.headline[:60]!r} -- its full text "
                 f"cannot be located in the page"
             )
-        if not article.bullets:
+        if not article.bullets and not article.is_table:
             result.warnings.append(
                 f"no BULLET lines for {article.headline[:60]!r}"
             )
