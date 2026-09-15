@@ -21,7 +21,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .config import CONFIG
@@ -485,6 +485,7 @@ class PrepareReport:
     skipped_by_selection: list[int] = field(default_factory=list)
     skipped_as_junk: list[int] = field(default_factory=list)
     junk_reasons: dict[int, str] = field(default_factory=dict)
+    articles_already_loaded: int = 0
     errors: list[str] = field(default_factory=list)
 
     def as_lines(self) -> list[str]:
@@ -494,6 +495,7 @@ class PrepareReport:
             f"  {self.edition_date or ''}".rstrip(),
             f"  pages           {self.pages_with_text} with text / {self.pages_seen} read",
             f"  prompts written {len(self.prompt_files)}",
+            f"  articles        {self.articles_already_loaded} already loaded for this edition",
         ]
         if self.skipped_by_selection:
             lines.append(
@@ -638,6 +640,12 @@ def prepare_edition(
         edition = _upsert_edition(session, pdf, sha, doc)
         edition.status = "awaiting_summaries"
         report.edition_id = edition.id
+        report.articles_already_loaded = (
+            session.scalar(
+                select(func.count(Article.id)).where(Article.newspaper_id == edition.id)
+            )
+            or 0
+        )
 
         # Store page text, replacing any earlier extraction of the same page.
         for page in doc.pages:

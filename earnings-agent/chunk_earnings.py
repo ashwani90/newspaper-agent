@@ -41,11 +41,25 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import re
 import sys
 import unicodedata
+import webbrowser
 from dataclasses import dataclass, field
 from pathlib import Path
+
+# PDFs routinely carry Unicode punctuation (curly quotes, en/em dashes, the
+# non-breaking hyphen U+2011) that isn't representable in the Windows
+# terminal's default cp1252 encoding -- printing a page preview or a chunk
+# summary would otherwise crash with UnicodeEncodeError. utf-8 with
+# replacement covers every platform's default without changing behaviour
+# where stdout is already utf-8 (Linux/macOS).
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
 
 try:
     import pdfplumber
@@ -621,12 +635,344 @@ def _readme_text(pdf: Path, out_dir: Path, chunks: list[PromptChunk]) -> str:
     lines.append("3. Repeat for each chunk.")
     lines.append("")
     lines.append(
-        f"There is no loader yet -- this tool only builds the prompts and leaves "
-        f"the replies as plain text files in {out_dir}. Reading them back into a "
-        f"database would be a separate script, built the same way "
-        f"newspaper-agent's \"load\" step reads its replies."
+        f"There is still no database -- once you've saved your replies here, run:\n"
+        f"  chunk_earnings.py report \"{out_dir}\"\n"
+        f"to build a browsable HTML page from them (see --help for details)."
     )
     return "\n".join(lines) + "\n"
+
+
+# --------------------------------------------------------------------------- #
+# Reading replies back: a browsable report, not a database
+# --------------------------------------------------------------------------- #
+#
+# There's still no loader into a database (see the module docstring) -- but a
+# pile of reply-*.txt files isn't something anyone can "effectively see and
+# understand" as plain text either, especially once there are dozens of them.
+# This parses every reply's ### ITEM blocks (tolerating the same markdown
+# mangling newspaper-agent's parser tolerates) and renders them into one
+# self-contained HTML file with no server and no external resources, so it
+# opens straight from disk (file://) via a plain double-click.
+
+_REPLY_KIND_GLOBS = (
+    ("chunk", "reply-*.txt"),
+    ("ipo", "ipo-reply-*.txt"),
+    ("results", "results-reply-*.txt"),
+)
+
+_ITEM_FIELD_KEYS = (
+    "PAGE", "SECTION", "BASIS", "LABEL", "PERIOD", "VALUE", "PRIOR_VALUE",
+    "PRIOR VALUE", "CHANGE", "ANCHOR", "SUMMARY", "WHY",
+)
+_ITEM_START = re.compile(r"^\s*#{2,4}\s*ITEM\b", re.IGNORECASE)
+_ITEM_END = re.compile(r"^\s*#{2,4}\s*END\b", re.IGNORECASE)
+_ITEM_LEADING_JUNK = re.compile(r"^\s*(?:[-*+]\s+|\d+[.)]\s+)?[*_`]*\s*")
+_ITEM_KEY_LINE = re.compile(
+    r"^(" + "|".join(_ITEM_FIELD_KEYS) + r")\s*[:\-]\s*(.*)$", re.IGNORECASE
+)
+
+
+def _clean_item_value(value: str) -> str:
+    text = value.strip()
+    text = re.sub(r"[*_`]+$", "", text).strip()
+    text = re.sub(r"^[*_`]+", "", text).strip()
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in "\"'":
+        text = text[1:-1].strip()
+    return text
+
+
+def parse_reply(text: str, *, kind: str, source: str) -> list[dict]:
+    """Parse one reply file's ### ITEM blocks into plain dicts.
+
+    Deliberately loose, like newspaper-agent's reply parser: unknown lines
+    are ignored rather than fatal, a reply truncated mid-item still yields
+    every complete item before the cut, and a wrapped SUMMARY/WHY line that
+    lost its line break in a chat window is folded back onto the field it
+    continues rather than dropped.
+    """
+    items: list[dict] = []
+    current: dict | None = None
+    normalised = unicodedata.normalize("NFC", text or "").replace("\r\n", "\n")
+
+    for line in normalised.split("\n"):
+        if _ITEM_START.match(line):
+            if current:
+                items.append(current)
+            current = {"kind": kind, "source": source}
+            continue
+        if _ITEM_END.match(line):
+            if current:
+                items.append(current)
+            current = None
+            continue
+        if current is None:
+            continue
+
+        candidate = _ITEM_LEADING_JUNK.sub("", line)
+        match = _ITEM_KEY_LINE.match(candidate)
+        if match:
+            key = match.group(1).upper().replace(" ", "_")
+            value = _clean_item_value(match.group(2))
+            if value:
+                current[key] = value
+            continue
+
+        # A continuation line of a multi-line SUMMARY (or WHY, whichever was
+        # populated most recently) -- chat windows sometimes wrap these.
+        if line.strip():
+            for field_name in ("SUMMARY", "WHY"):
+                if field_name in current:
+                    current[field_name] = f"{current[field_name]} {line.strip()}"
+                    break
+
+    if current:
+        items.append(current)
+    return items
+
+
+def load_replies(folder: Path) -> tuple[list[dict], dict[str, int]]:
+    """Parse every reply file in a prompts folder. Returns (items, counts-by-kind)."""
+    items: list[dict] = []
+    counts = {kind: 0 for kind, _ in _REPLY_KIND_GLOBS}
+    seen: set[str] = set()
+    for kind, pattern in _REPLY_KIND_GLOBS:
+        for path in sorted(folder.glob(pattern)):
+            if path.name in seen:
+                continue
+            seen.add(path.name)
+            text = path.read_text(encoding="utf-8", errors="replace")
+            parsed = parse_reply(text, kind=kind, source=path.name)
+            items.extend(parsed)
+            counts[kind] += len(parsed)
+    return items, counts
+
+
+_KIND_LABELS = {"chunk": "Financial Metric", "ipo": "IPO Announcement", "results": "Published Results"}
+
+_REPORT_HTML_TEMPLATE = """\
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>__TITLE__ -- extracted items</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --panel: #ffffff; --ink: #1c2430; --ink-soft: #5b6675;
+    --ink-faint: #8b95a3; --line: #e3e6ea; --accent: #1a5fb4; --accent-bg: #e8f0fc;
+    --warn-bg: #fff4e5; --warn-ink: #8a5300;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-size: 14px; line-height: 1.5; }
+  header {
+    position: sticky; top: 0; z-index: 5; background: var(--panel);
+    border-bottom: 1px solid var(--line); padding: 14px 24px;
+    display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+  }
+  header h1 { font-size: 17px; margin: 0; font-weight: 700; }
+  header .stats { font-size: 12.5px; color: var(--ink-soft); }
+  .toolbar {
+    display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+    margin-left: auto;
+  }
+  .toolbar input[type="search"], .toolbar select {
+    border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px;
+    font-size: 13px; background: var(--panel); color: var(--ink);
+  }
+  .toolbar input[type="search"] { width: 220px; }
+  main { max-width: 980px; margin: 0 auto; padding: 20px 24px 80px; }
+  .section-group { margin-bottom: 22px; }
+  .section-title {
+    display: flex; align-items: center; gap: 10px; margin: 0 0 10px;
+    font-size: 12.5px; font-weight: 700; letter-spacing: 0.04em;
+    text-transform: uppercase; color: var(--ink-soft);
+  }
+  .section-title .count {
+    background: var(--line); color: var(--ink-soft); border-radius: 999px;
+    padding: 1px 9px; font-size: 11px; font-weight: 700;
+  }
+  .item-card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 14px 16px; margin-bottom: 8px;
+  }
+  .item-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .item-label { font-weight: 700; font-size: 14.5px; }
+  .item-period { color: var(--ink-soft); font-size: 12.5px; }
+  .item-basis {
+    font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.03em; color: var(--accent); background: var(--accent-bg);
+    border-radius: 999px; padding: 1px 8px;
+  }
+  .item-meta { margin-left: auto; font-size: 11.5px; color: var(--ink-faint); white-space: nowrap; }
+  .item-values { margin-top: 6px; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .item-value { font-size: 19px; font-weight: 700; }
+  .item-prior { font-size: 12.5px; color: var(--ink-faint); }
+  .item-change { font-size: 12.5px; font-weight: 700; color: var(--accent); }
+  .item-summary { margin: 8px 0 0; color: var(--ink); }
+  .item-why {
+    margin-top: 8px; background: var(--warn-bg); color: var(--warn-ink);
+    border-radius: 8px; padding: 8px 11px; font-size: 12.5px;
+  }
+  .item-anchor-toggle {
+    margin-top: 8px; font-size: 11.5px; color: var(--accent); cursor: pointer;
+    background: none; border: none; padding: 0; font-family: inherit;
+  }
+  .item-anchor {
+    display: none; margin-top: 6px; font-size: 12px; color: var(--ink-soft);
+    background: var(--bg); border-radius: 8px; padding: 8px 11px; font-style: italic;
+  }
+  .item-anchor.is-open { display: block; }
+  .item-card[hidden] { display: none; }
+  .section-group[hidden] { display: none; }
+  .empty { text-align: center; color: var(--ink-faint); padding: 60px 20px; }
+  .kind-tag {
+    font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.03em; color: var(--ink-soft);
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>__TITLE__</h1>
+  <div class="stats">__STATS__</div>
+  <div class="toolbar">
+    <input type="search" id="q" placeholder="Search label, value, summary..." />
+    <select id="sectionFilter"><option value="">All sections</option></select>
+    __KIND_FILTER__
+  </div>
+</header>
+<main id="main"></main>
+<script id="report-data" type="application/json">__DATA_JSON__</script>
+<script>
+const items = JSON.parse(document.getElementById('report-data').textContent);
+const main = document.getElementById('main');
+const q = document.getElementById('q');
+const sectionFilter = document.getElementById('sectionFilter');
+const kindFilter = document.getElementById('kindFilter');
+
+const sections = [...new Set(items.map(i => i.SECTION || 'Uncategorised'))].sort();
+for (const s of sections) {
+  const opt = document.createElement('option');
+  opt.value = s; opt.textContent = s;
+  sectionFilter.appendChild(opt);
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str ?? '';
+  return div.innerHTML;
+}
+
+function matches(item, query) {
+  if (!query) return true;
+  const hay = [item.LABEL, item.VALUE, item.SUMMARY, item.WHY, item.PERIOD]
+    .filter(Boolean).join(' ').toLowerCase();
+  return hay.includes(query.toLowerCase());
+}
+
+function render() {
+  const query = q.value.trim();
+  const wantSection = sectionFilter.value;
+  const wantKind = kindFilter ? kindFilter.value : '';
+
+  const bySection = new Map();
+  for (const item of items) {
+    const section = item.SECTION || 'Uncategorised';
+    if (wantSection && section !== wantSection) continue;
+    if (wantKind && item.kind !== wantKind) continue;
+    if (!matches(item, query)) continue;
+    if (!bySection.has(section)) bySection.set(section, []);
+    bySection.get(section).push(item);
+  }
+
+  main.innerHTML = '';
+  if (!bySection.size) {
+    main.innerHTML = '<div class="empty">No items match these filters.</div>';
+    return;
+  }
+
+  for (const [section, group] of [...bySection.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+    const wrap = document.createElement('div');
+    wrap.className = 'section-group';
+    wrap.innerHTML = `<div class="section-title">${escapeHtml(section)} <span class="count">${group.length}</span></div>`;
+
+    group.sort((a, b) => (parseInt(a.PAGE) || 0) - (parseInt(b.PAGE) || 0));
+
+    for (const item of group) {
+      const card = document.createElement('div');
+      card.className = 'item-card';
+
+      const valuesLine = (item.VALUE || item.PRIOR_VALUE || item.CHANGE) ? `
+        <div class="item-values">
+          ${item.VALUE ? `<span class="item-value">${escapeHtml(item.VALUE)}</span>` : ''}
+          ${item.PRIOR_VALUE ? `<span class="item-prior">prior: ${escapeHtml(item.PRIOR_VALUE)}</span>` : ''}
+          ${item.CHANGE ? `<span class="item-change">${escapeHtml(item.CHANGE)}</span>` : ''}
+        </div>` : '';
+
+      const anchorId = 'a' + Math.random().toString(36).slice(2);
+
+      card.innerHTML = `
+        <div class="item-head">
+          <span class="item-label">${escapeHtml(item.LABEL || '(untitled)')}</span>
+          ${item.PERIOD ? `<span class="item-period">${escapeHtml(item.PERIOD)}</span>` : ''}
+          ${item.BASIS ? `<span class="item-basis">${escapeHtml(item.BASIS)}</span>` : ''}
+          <span class="item-meta">${item.PAGE ? 'p' + escapeHtml(item.PAGE) : ''} &middot; <span class="kind-tag">${escapeHtml(item.kind || '')}</span></span>
+        </div>
+        ${valuesLine}
+        ${item.SUMMARY ? `<p class="item-summary">${escapeHtml(item.SUMMARY)}</p>` : ''}
+        ${item.WHY ? `<div class="item-why">${escapeHtml(item.WHY)}</div>` : ''}
+        ${item.ANCHOR ? `
+          <button class="item-anchor-toggle" data-target="${anchorId}">Show source text</button>
+          <div class="item-anchor" id="${anchorId}">&ldquo;${escapeHtml(item.ANCHOR)}&hellip;&rdquo; -- ${escapeHtml(item.source || '')}</div>
+        ` : ''}
+      `;
+      wrap.appendChild(card);
+    }
+    main.appendChild(wrap);
+  }
+
+  main.querySelectorAll('.item-anchor-toggle').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      document.getElementById(btn.dataset.target).classList.toggle('is-open');
+    });
+  });
+}
+
+q.addEventListener('input', render);
+sectionFilter.addEventListener('change', render);
+if (kindFilter) kindFilter.addEventListener('change', render);
+render();
+</script>
+</body>
+</html>
+"""
+
+
+def render_report_html(*, title: str, items: list[dict], counts: dict[str, int]) -> str:
+    present_kinds = [kind for kind, count in counts.items() if count > 0]
+    kind_filter_html = ""
+    if len(present_kinds) > 1:
+        options = "".join(
+            f'<option value="{kind}">{_KIND_LABELS.get(kind, kind)}</option>'
+            for kind in present_kinds
+        )
+        kind_filter_html = f'<select id="kindFilter"><option value="">All kinds</option>{options}</select>'
+
+    stats_parts = [f"{len(items)} item(s)"]
+    stats_parts.extend(
+        f"{count} {_KIND_LABELS.get(kind, kind).lower()}"
+        for kind, count in counts.items()
+        if count > 0 and len(present_kinds) > 1
+    )
+    stats = " &middot; ".join(stats_parts)
+
+    html = _REPORT_HTML_TEMPLATE
+    html = html.replace("__TITLE__", title)
+    html = html.replace("__STATS__", stats)
+    html = html.replace("__KIND_FILTER__", kind_filter_html)
+    html = html.replace("__DATA_JSON__", json.dumps(items))
+    return html
 
 
 # --------------------------------------------------------------------------- #
@@ -755,6 +1101,44 @@ def cmd_prompt(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_report(args: argparse.Namespace) -> int:
+    target = Path(args.target)
+    if target.is_file():
+        folder = Path(__file__).parent / "prompts" / target.stem
+    else:
+        folder = target
+
+    if not folder.exists():
+        print(f"folder not found: {folder}", file=sys.stderr)
+        return 1
+
+    items, counts = load_replies(folder)
+    if not items:
+        print(
+            f"no reply files found in {folder}\n"
+            f"(looked for reply-*.txt, ipo-reply-*.txt, results-reply-*.txt)",
+            file=sys.stderr,
+        )
+        return 1
+
+    html = render_report_html(title=folder.name, items=items, counts=counts)
+    out_path = folder / "report.html"
+    out_path.write_text(html, encoding="utf-8")
+
+    print(f"  items     {len(items)}")
+    for kind, count in counts.items():
+        if count:
+            print(f"    {_KIND_LABELS.get(kind, kind):<18} {count}")
+    print(f"  report    {out_path}")
+
+    if not args.no_open:
+        try:
+            webbrowser.open(out_path.resolve().as_uri())
+        except Exception:
+            pass
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Build LLM chat prompts from a financial PDF (earnings "
@@ -784,6 +1168,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--out", default=None, help="output folder (default: ./prompts/<pdf-stem>)")
     p.set_defaults(func=cmd_prompt)
+
+    p = sub.add_parser(
+        "report",
+        help="parse saved reply-*.txt files into a browsable HTML page",
+    )
+    p.add_argument(
+        "target",
+        help="a prompts folder (e.g. prompts/tata-motor), or the original PDF path",
+    )
+    p.add_argument("--no-open", action="store_true", help="don't open the report in a browser")
+    p.set_defaults(func=cmd_report)
 
     return parser
 
