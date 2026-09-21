@@ -19,6 +19,7 @@ this module reports that rather than silently returning empty articles.
 
 from __future__ import annotations
 
+import multiprocessing as mp
 import re
 from dataclasses import dataclass, field
 from datetime import date
@@ -66,6 +67,8 @@ class PdfDocument:
     selected: set[int] | None = None
     skipped_by_selection: list[int] = field(default_factory=list)
     skipped_as_junk: list[int] = field(default_factory=list)
+    timed_out_pages: list[int] = field(default_factory=list)
+    fallback_pages: list[int] = field(default_factory=list)
 
     @property
     def text_pages(self) -> list[PageText]:
@@ -73,7 +76,12 @@ class PdfDocument:
 
     @property
     def image_only_pages(self) -> list[int]:
-        return [p.page_number for p in self.pages if not p.has_text_layer]
+        timed_out = set(self.timed_out_pages)
+        return [
+            p.page_number
+            for p in self.pages
+            if not p.has_text_layer and p.page_number not in timed_out
+        ]
 
 
 # --------------------------------------------------------------------------- #
@@ -454,6 +462,157 @@ def guess_edition_date(first_page_text: str) -> date | None:
     return None
 
 
+# A handful of newspaper pages turn out to have a pathological content
+# stream -- observed cause: an RC4-encrypted page carrying a huge embedded
+# vector graphic (a Form XObject several MB compressed), which pdfminer's
+# pure-Python RC4 decryption chokes on -- that can take many minutes
+# (observed: 400s+ and still climbing) to parse a single page, hanging the
+# whole command with no way to tell a slow page from a genuinely stuck one.
+#
+# Each page's extraction now runs in its own subprocess with a hard
+# wall-clock budget. A page that blows through it is retried with pypdf
+# instead, whose decrypt() uses the `cryptography` package's C backend when
+# installed and sidesteps pdfminer's slow pure-Python arcfour entirely --
+# in the case this was built for, that took 6 seconds instead of never
+# finishing. Only if *that* also fails or times out is the page finally
+# given up on and reported as timed out.
+PAGE_EXTRACTION_TIMEOUT = 45  # seconds, primary (pdfplumber/pdfminer) path
+FALLBACK_EXTRACTION_TIMEOUT = 60  # seconds, pypdf fallback path
+
+
+def _run_in_subprocess(worker, args: tuple, timeout: float) -> tuple:
+    """Run ``worker(*args, conn)`` in its own subprocess with a hard budget.
+
+    Returns whatever the worker sent back through ``conn`` -- by convention
+    ``("ok", ...)`` or ``("error", message)`` -- or ``("timeout",)`` if it
+    didn't respond in time. Never blocks longer than ``timeout`` plus a
+    couple of seconds of cleanup, no matter what the child does: terminating
+    a subprocess and waiting for it to actually exit are two different
+    things, and blocking on the latter is what previously turned a 45s
+    timeout into a 110-minute hang in testing. A briefly-lingering orphaned
+    process is far cheaper than a hung command.
+    """
+    parent_conn, child_conn = mp.Pipe(duplex=False)
+    proc = mp.Process(target=worker, args=(*args, child_conn), daemon=True)
+    proc.start()
+    child_conn.close()  # only the child should hold the writable end
+
+    def _stop(p: "mp.Process") -> None:
+        try:
+            p.terminate()
+        except Exception:  # noqa: BLE001 - best-effort, never let this raise
+            pass
+
+    if not parent_conn.poll(timeout):
+        _stop(proc)
+        parent_conn.close()
+        return ("timeout",)
+
+    try:
+        result = parent_conn.recv()
+    except EOFError:
+        result = ("error", "worker exited without a result")
+    parent_conn.close()
+    # The worker had already sent its result and is exiting on its own by
+    # this point, so a short bounded join is safe here -- it is never the
+    # slow path.
+    proc.join(2)
+    if proc.is_alive():
+        _stop(proc)
+    return result
+
+
+def _pdfplumber_page_worker(
+    path_str: str, page_number: int, include_layout: bool, conn
+) -> None:
+    """Runs in a child process. Sends ("ok", layout_text, column_text,
+    has_text_layer) or ("error", message) back through ``conn``.
+    """
+    try:
+        with pdfplumber.open(path_str) as pdf:
+            page = pdf.pages[page_number - 1]
+            layout_text = (page.extract_text(layout=True) or "") if include_layout else ""
+            column_text = _column_ordered_text(page)
+            has_text_layer = len(page.chars) > 0
+        conn.send(("ok", layout_text, column_text, has_text_layer))
+    except Exception as exc:  # noqa: BLE001 - reported to the parent, not raised here
+        conn.send(("error", str(exc)))
+    finally:
+        conn.close()
+
+
+def _pypdf_page_worker(path_str: str, page_number: int, conn) -> None:
+    """Fallback worker: pypdf's own extraction, used when pdfplumber times
+    out. Sends ("ok", text) or ("error", message) back through ``conn``.
+    """
+    try:
+        import logging
+
+        import pypdf
+
+        # A page with several embedded subsetted fonts (routine in a
+        # newspaper PDF) logs one "fontTools is required..." warning per
+        # font otherwise -- harmless, but this runs unattended every time
+        # the fallback triggers, so keep it quiet.
+        logging.getLogger("pypdf").setLevel(logging.ERROR)
+
+        reader = pypdf.PdfReader(path_str)
+        if reader.is_encrypted:
+            reader.decrypt("")
+        page = reader.pages[page_number - 1]
+        text = (page.extract_text() or "").strip()
+        conn.send(("ok", text))
+    except Exception as exc:  # noqa: BLE001 - reported to the parent, not raised here
+        conn.send(("error", str(exc)))
+    finally:
+        conn.close()
+
+
+# pypdf's extraction is reading-order text, not the column-ordered rendering
+# _column_ordered_text produces -- on a multi-column page it can interleave
+# columns. This note is prepended to a fallback page's text so whoever (or
+# whatever) reads it treats article/column boundaries with extra care; it
+# ends up stored as part of the page's text like any other content, so it
+# survives into the chunk prompt naturally.
+FALLBACK_NOTE = (
+    "[NOTE: this page's text was extracted with a fallback method (pypdf) "
+    "because the primary extractor timed out, likely on a large embedded "
+    "graphic. It is NOT column-ordered the way other pages are -- on a "
+    "multi-column page, text from different columns may be interleaved. "
+    "Treat article/column boundaries with extra care.]\n\n"
+)
+
+
+def _extract_page_with_timeout(
+    path: Path,
+    page_number: int,
+    include_layout: bool,
+    timeout: float = PAGE_EXTRACTION_TIMEOUT,
+) -> tuple[str, str, bool, bool, bool]:
+    """Extract one page, falling back to pypdf if the primary path times out.
+
+    Returns (layout_text, column_text, has_text_layer, timed_out,
+    used_fallback). ``timed_out`` means both the primary path and the
+    fallback failed to produce anything within budget; ``used_fallback``
+    means the pypdf path is what actually produced the returned text.
+    """
+    result = _run_in_subprocess(
+        _pdfplumber_page_worker, (str(path), page_number, include_layout), timeout
+    )
+    if result[0] == "ok":
+        _, layout_text, column_text, has_text_layer = result
+        return layout_text, column_text, has_text_layer, False, False
+
+    fallback = _run_in_subprocess(
+        _pypdf_page_worker, (str(path), page_number), FALLBACK_EXTRACTION_TIMEOUT
+    )
+    if fallback[0] == "ok" and fallback[1]:
+        return "", FALLBACK_NOTE + fallback[1], True, False, True
+
+    timed_out = result[0] == "timeout" or fallback[0] == "timeout"
+    return "", "", False, timed_out, False
+
+
 def extract_pdf(
     path: Path,
     max_pages: int = 0,
@@ -467,44 +626,41 @@ def extract_pdf(
     sections. ``max_pages`` caps how many pages are read and applies after the
     selection.
     """
-    pages: list[PageText] = []
-    skipped_by_selection: list[int] = []
     with pdfplumber.open(str(path)) as pdf:
         total = len(pdf.pages)
-        wanted = (
-            sorted(n for n in pages_wanted if 1 <= n <= total)
-            if pages_wanted
-            else list(range(1, total + 1))
-        )
-        if pages_wanted:
-            skipped_by_selection = [n for n in range(1, total + 1) if n not in wanted]
-        if max_pages > 0:
-            wanted = wanted[:max_pages]
 
-        for page_number in wanted:
-            index = page_number - 1
-            page = pdf.pages[index]
-            layout_text = (page.extract_text(layout=True) or "") if include_layout else ""
-            column_text = _column_ordered_text(page)
-            best = max(len(layout_text.strip()), len(column_text.strip()))
-            # Whether the page has a real text layer at all must not depend
-            # on include_layout, and must not be fooled by layout_text's
-            # whitespace padding (extract_text(layout=True) preserves visual
-            # position, so even a tiny ad can pad out to thousands of
-            # characters). page.chars is the raw, already-parsed character
-            # list pdfplumber built while opening the page -- reading its
-            # length is free and reflects genuine extractable content
-            # regardless of which rendering(s) were requested.
-            has_text_layer = len(page.chars) > 0
-            pages.append(
-                PageText(
-                    page_number=index + 1,
-                    layout_text=layout_text,
-                    column_text=column_text,
-                    char_count=best,
-                    has_text_layer=has_text_layer,
-                )
+    wanted = (
+        sorted(n for n in pages_wanted if 1 <= n <= total)
+        if pages_wanted
+        else list(range(1, total + 1))
+    )
+    skipped_by_selection: list[int] = []
+    if pages_wanted:
+        skipped_by_selection = [n for n in range(1, total + 1) if n not in wanted]
+    if max_pages > 0:
+        wanted = wanted[:max_pages]
+
+    pages: list[PageText] = []
+    timed_out_pages: list[int] = []
+    fallback_pages: list[int] = []
+    for page_number in wanted:
+        layout_text, column_text, has_text_layer, timed_out, used_fallback = (
+            _extract_page_with_timeout(path, page_number, include_layout)
+        )
+        if timed_out:
+            timed_out_pages.append(page_number)
+        if used_fallback:
+            fallback_pages.append(page_number)
+        best = max(len(layout_text.strip()), len(column_text.strip()))
+        pages.append(
+            PageText(
+                page_number=page_number,
+                layout_text=layout_text,
+                column_text=column_text,
+                char_count=best,
+                has_text_layer=has_text_layer,
             )
+        )
 
     first_text = pages[0].column_text if pages else ""
     return PdfDocument(
@@ -515,6 +671,8 @@ def extract_pdf(
         edition_date=guess_edition_date(first_text),
         selected=set(pages_wanted) if pages_wanted else None,
         skipped_by_selection=skipped_by_selection,
+        timed_out_pages=timed_out_pages,
+        fallback_pages=fallback_pages,
     )
 
 

@@ -2,6 +2,9 @@ langchain>=1.4,<2
 langchain-anthropic>=1.7,<2
 langgraph>=1.2,<2
 pypdf>=6.0
+cryptography>=41        # gives pypdf's decrypt() a fast C backend -- without
+                        # it, extract.py's pypdf fallback for pages pdfminer
+                        # times out on would itself be slow
 pdfplumber>=0.11
 SQLAlchemy>=2.0
 psycopg2-binary>=2.9    # CLI and webapp both talk to PostgreSQL directly

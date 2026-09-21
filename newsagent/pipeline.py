@@ -71,6 +71,8 @@ class IngestReport:
     pages_seen: int = 0
     pages_with_text: int = 0
     image_only_pages: list[int] = field(default_factory=list)
+    timed_out_pages: list[int] = field(default_factory=list)
+    fallback_pages: list[int] = field(default_factory=list)
     articles_found: int = 0
     articles_skipped_short: int = 0
     summaries_written: int = 0
@@ -106,6 +108,22 @@ class IngestReport:
             preview = ", ".join(str(p) for p in self.image_only_pages[:12])
             more = " ..." if len(self.image_only_pages) > 12 else ""
             lines.append(f"  NO TEXT LAYER   pages {preview}{more}  (needs OCR)")
+        if self.timed_out_pages:
+            preview = ", ".join(str(p) for p in self.timed_out_pages[:12])
+            more = " ..." if len(self.timed_out_pages) > 12 else ""
+            lines.append(
+                f"  TIMED OUT       pages {preview}{more}  "
+                f"(extraction took too long and was skipped -- rerun with "
+                f"--pages excluding it, or investigate the PDF)"
+            )
+        if self.fallback_pages:
+            preview = ", ".join(str(p) for p in self.fallback_pages[:12])
+            more = " ..." if len(self.fallback_pages) > 12 else ""
+            lines.append(
+                f"  FALLBACK USED   pages {preview}{more}  "
+                f"(primary extractor timed out; recovered via pypdf -- "
+                f"text is not column-ordered, see the note in the page text)"
+            )
         for err in self.errors:
             lines.append(f"  ERROR           {err}")
         return lines
@@ -255,6 +273,8 @@ def ingest_pdf(
     report.pages_seen = len(doc.pages)
     report.pages_with_text = len(doc.text_pages)
     report.image_only_pages = doc.image_only_pages
+    report.timed_out_pages = doc.timed_out_pages
+    report.fallback_pages = doc.fallback_pages
 
     with session_scope() as session:
         existing = find_edition_by_hash(session, sha)
@@ -282,18 +302,36 @@ def ingest_pdf(
         }
 
     if not doc.text_pages:
+        # A page that timed out during extraction has no text for a reason
+        # unrelated to being a scanned image -- conflating the two sends you
+        # chasing an OCR problem you do not have.
+        all_timed_out = bool(doc.timed_out_pages) and not doc.image_only_pages
         with session_scope() as session:
             edition = session.get(Edition, report.edition_id)
             if edition is not None:
-                edition.status = "no_text_layer"
-                edition.note = (
-                    "No page in this PDF has an extractable text layer. It is a "
-                    "scanned/image e-paper and needs OCR before it can be read."
-                )
-        report.errors.append(
-            "no extractable text on any page -- this PDF is scanned images, "
-            "so it needs OCR (see README, 'Scanned PDFs')"
-        )
+                if all_timed_out:
+                    edition.status = "extraction_timed_out"
+                    edition.note = (
+                        "Every selected page timed out during extraction -- "
+                        "see the TIMED OUT pages list."
+                    )
+                else:
+                    edition.status = "no_text_layer"
+                    edition.note = (
+                        "No page in this PDF has an extractable text layer. It is a "
+                        "scanned/image e-paper and needs OCR before it can be read."
+                    )
+        if all_timed_out:
+            report.errors.append(
+                "every selected page timed out during extraction -- see the "
+                "TIMED OUT pages above. Try a different --pages selection, "
+                "or investigate whether the PDF itself is malformed there"
+            )
+        else:
+            report.errors.append(
+                "no extractable text on any page -- this PDF is scanned images, "
+                "so it needs OCR (see README, 'Scanned PDFs')"
+            )
         return report
 
     # ---- Stage 1: segment each page into articles ------------------------
@@ -480,6 +518,8 @@ class PrepareReport:
     pages_seen: int = 0
     pages_with_text: int = 0
     image_only_pages: list[int] = field(default_factory=list)
+    timed_out_pages: list[int] = field(default_factory=list)
+    fallback_pages: list[int] = field(default_factory=list)
     prompt_dir: Path | None = None
     prompt_files: list[Path] = field(default_factory=list)
     skipped_by_selection: list[int] = field(default_factory=list)
@@ -515,6 +555,22 @@ class PrepareReport:
             preview = ", ".join(str(p) for p in self.image_only_pages[:12])
             more = " ..." if len(self.image_only_pages) > 12 else ""
             lines.append(f"  NO TEXT LAYER   pages {preview}{more}  (needs OCR)")
+        if self.timed_out_pages:
+            preview = ", ".join(str(p) for p in self.timed_out_pages[:12])
+            more = " ..." if len(self.timed_out_pages) > 12 else ""
+            lines.append(
+                f"  TIMED OUT       pages {preview}{more}  "
+                f"(extraction took too long and was skipped -- rerun with "
+                f"--pages excluding it, or investigate the PDF)"
+            )
+        if self.fallback_pages:
+            preview = ", ".join(str(p) for p in self.fallback_pages[:12])
+            more = " ..." if len(self.fallback_pages) > 12 else ""
+            lines.append(
+                f"  FALLBACK USED   pages {preview}{more}  "
+                f"(primary extractor timed out; recovered via pypdf -- "
+                f"text is not column-ordered, see the note in the page text)"
+            )
         for err in self.errors:
             lines.append(f"  ERROR           {err}")
         return lines
@@ -633,6 +689,8 @@ def prepare_edition(
     report.pages_seen = len(doc.pages)
     report.pages_with_text = len(doc.text_pages)
     report.image_only_pages = doc.image_only_pages
+    report.timed_out_pages = doc.timed_out_pages
+    report.fallback_pages = doc.fallback_pages
     report.source_name = doc.source_name
     report.edition_date = doc.edition_date.isoformat() if doc.edition_date else None
 
@@ -672,28 +730,41 @@ def prepare_edition(
         sync_topics(session, parse_topics_file())
 
     if not doc.text_pages:
-        # Two very different causes, and conflating them sends you chasing an
-        # OCR problem you do not have.
+        # Three different causes, and conflating them sends you chasing a
+        # problem you do not have.
         filtered_out = had_text_before_filtering
+        all_timed_out = bool(doc.timed_out_pages) and not doc.image_only_pages
         with session_scope() as session:
             edition = session.get(Edition, report.edition_id)
             if edition is not None:
-                edition.status = (
-                    "all_pages_filtered" if filtered_out else "no_text_layer"
-                )
-                edition.note = (
-                    "Every page that was selected got dropped by --skip-junk."
-                    if filtered_out
-                    else "No page in this PDF has an extractable text layer. "
-                    "It is a scanned/image e-paper and needs OCR before it "
-                    "can be read."
-                )
+                if filtered_out:
+                    edition.status = "all_pages_filtered"
+                    edition.note = "Every page that was selected got dropped by --skip-junk."
+                elif all_timed_out:
+                    edition.status = "extraction_timed_out"
+                    edition.note = (
+                        "Every selected page timed out during extraction -- "
+                        "see the TIMED OUT pages list."
+                    )
+                else:
+                    edition.status = "no_text_layer"
+                    edition.note = (
+                        "No page in this PDF has an extractable text layer. "
+                        "It is a scanned/image e-paper and needs OCR before it "
+                        "can be read."
+                    )
         if filtered_out:
             report.errors.append(
                 "every selected page was dropped as junk, so there is nothing "
                 "to summarise. Run 'newsagent pages' on this PDF to see how "
                 "each page was judged, then name the pages you want with "
                 "--pages"
+            )
+        elif all_timed_out:
+            report.errors.append(
+                "every selected page timed out during extraction -- see the "
+                "TIMED OUT pages above. Try a different --pages selection, "
+                "or investigate whether the PDF itself is malformed there"
             )
         else:
             report.errors.append(
