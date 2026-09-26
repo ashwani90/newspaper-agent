@@ -5,6 +5,10 @@ Claude Code skill for end-to-end newspaper PDF processing using `newspaper-agent
 ## Files
 
 - **`newspaper/SKILL.md`** — The skill definition for Claude Code
+- **`video-ideas/SKILL.md`** — Researches unique short-form social video ideas
+  from the news library (`/video-ideas`, e.g. `/video-ideas AI this week`).
+  Installed at `C:\Users\ashwa\.claude\skills\video-ideas\SKILL.md`; hands
+  its pitches off to the `story-reel` skill for scripting.
 
 ## How to Use
 
