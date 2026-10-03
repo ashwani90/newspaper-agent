@@ -25,6 +25,24 @@ redirect long output to a file in your scratchpad and read the file:
 ... -m newsagent digest --since 7d --all --full > "<scratchpad>\digest.txt" 2>&1
 ```
 
+## Read the channel's scorecard first
+
+Before scanning, read `E:\youtube_video\docs\channel\performance.md`. It holds the channel's
+(Jkinda Studio) own numbers and the rules they produced. Pitch for what that file says works, not
+for generic virality. At the 2026-10-03 snapshot it said:
+
+- **The lane is news as vertical Shorts.** News Shorts averaged ~91 views; long-form news explainers
+  averaged 3. Pitch Shorts only, unless the file says otherwise.
+- **Hot + human + follow-up wins.** The top two uploads were a breaking story shipped within a day,
+  then a follow-up on the person at its centre. A fresh story with a named human beats a slow one.
+- **Concrete beats abstract.** A specific incident, number, place or person, never a concept
+  ("AI agent hacked a govt site" 89 views vs "How AI can take control" 18).
+- **No Part 1 / Part 2 series.** Each pitch is one self-contained Short.
+- **Indian money and policy stories** (RBI, UPI, IPOs, H-1B) are the channel's home beat, along with
+  world stories that have an Indian angle (the FZ1073 captain).
+
+If the file is missing, say so and use these points.
+
 ## What the user gives you
 
 Any of: a topic area ("AI", "startups"), a time window ("this week",
@@ -114,6 +132,17 @@ Score each surviving candidate 1-5 on:
 | Relevance | Viewer feels it affects them, or it's a genuinely surprising "huh" |
 | Monetization safety | Advertiser-friendly, not reused content, no copyright-bait visuals |
 
+Then apply **channel fit** from the scorecard as the tie-breaker and the shortlist filter:
+
+- +2 if it's hot (broke in the last ~48 h) **and** has a named human or place, or it's a real
+  **follow-up** to a story in `story_log.jsonl` that has a new development (new angle, new person,
+  new number).
+- +1 if it's on the home beat (Indian money/policy, or a world story with an Indian angle).
+- -2 if it's abstract (a concept, a trend or "the future of X" with no incident, number or person),
+  or it only works as a multi-part series.
+
+Show it in the pitch as `fit +N/-N`. It is added to the total but never overrides a gate.
+
 Rank by total, but **Uniqueness and Sourcing are gates**: anything scoring
 <=2 on either is out regardless of total. Keep variety in the final list --
 don't hand back five stories from one topic or five ideas that would all use
@@ -124,14 +153,16 @@ Read the tail of
 already made) and `E:\newspaper-agent\data\video_ideas_log.jsonl` (ideas
 already pitched), if they exist. Don't re-pitch a story already made or
 pitched in the last 30 days unless there's a real new development -- then
-say what changed.
+say what changed. Do actively look for those developments in the last week's
+library for the 2-3 most recent stories in `story_log.jsonl`. A follow-up
+on a story the channel has just covered is the best-performing pitch it has.
 
 ## Step 5: Write the pitches
 
 For each of the top N ideas:
 
 ```
-### N. <working title -- honest, specific, <= 70 chars>
+### N. <working title -- honest, specific, <= 70 chars; the searched term + the surprising fact or open question; never "<Topic> Explained", no hashtags, no "Part N">
 HOOK: <the opening line, <= 14 words, a real fact from the library>
 ANGLE: <one sentence -- what this video shows that no single article does>
 STORY SHAPE: <e.g. follow-the-number, two-sides, promise-vs-record,
@@ -143,9 +174,14 @@ SOURCES: #<id> <headline> (<paper>, <date>); #<id> ...
 VISUALS: <2-3 concrete, license-safe ideas -- e.g. animated bar of the two
   figures, Wikimedia Commons photo of the plant, screenshot of the public
   filing>
-SCORES: hook X, unique X, sourcing X, visual X, relevance X, safety X = XX/30
+CHANNEL FIT: <hot/follow-up/home beat/abstract, from the scorecard> -- fit +N
+SCORES: hook X, unique X, sourcing X, visual X, relevance X, safety X, fit +N = XX
 CHECK BEFORE SCRIPTING: <anything unverified or disputed; omit if none>
 ```
+
+Hooks open on the turn (what went wrong, the number, the person), never on the
+date or the setting: "On September 30, flight FZ1073 was flying from Dubai..."
+is background, and was the top Short's weakest moment.
 
 Rules: no stock lines ("You won't believe", "Nobody is talking about",
 "Here's what you need to know"), no clickbait titles, and never state a fact
