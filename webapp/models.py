@@ -5,7 +5,10 @@ and the webapp.
     pages            one row per PDF page, raw extracted text (CLI staging:
                      builds chat prompts, and article bodies are sliced out
                      of it by anchor)
-    articles         one row per article -- original text, summary, category
+    articles         one row per article -- original text, summary, category,
+                     and an optional story it belongs to
+    stories          user-defined story names an article can optionally be
+                     filed under (separate from CLI-tagged topics)
     topics           distinct topic names, mirrored from the CLI's topics.txt
     article_topics   which topics each article was tagged with, with confidence
 
@@ -114,6 +117,22 @@ class Topic(Base):
         return json.loads(self.keywords_json or "[]")
 
 
+class Story(Base):
+    """A named story that articles can optionally be grouped under.
+
+    Created by a person in the browser UI (unlike topics, which the CLI
+    mirrors from topics.txt and tags automatically).
+    """
+
+    __tablename__ = "stories"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    articles: Mapped[list["Article"]] = relationship(back_populates="story")
+
+
 class Article(Base):
     __tablename__ = "articles"
     __table_args__ = (
@@ -132,6 +151,11 @@ class Article(Base):
     byline: Mapped[str | None] = mapped_column(Text, nullable=True)
     section: Mapped[str | None] = mapped_column(String(120), nullable=True)
     category: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+
+    # Optional story grouping; deleting a story just un-files its articles.
+    story_id: Mapped[int | None] = mapped_column(
+        ForeignKey("stories.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     original_text: Mapped[str] = mapped_column(Text)
     # Rough word count of original_text (CLI display only).
@@ -172,6 +196,7 @@ class Article(Base):
     )
 
     newspaper: Mapped[Newspaper] = relationship(back_populates="articles")
+    story: Mapped[Story | None] = relationship(back_populates="articles")
     topic_links: Mapped[list["ArticleTopic"]] = relationship(
         back_populates="article", cascade="all, delete-orphan"
     )

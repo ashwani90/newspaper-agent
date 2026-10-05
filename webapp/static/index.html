@@ -112,6 +112,24 @@
           <div class="combo-menu" id="topicMenu" role="listbox" hidden></div>
         </div>
 
+        <label class="field-label">Story</label>
+        <div class="combo">
+          <input
+            type="text"
+            id="storySearch"
+            class="combo-input"
+            placeholder="All stories"
+            autocomplete="off"
+            role="combobox"
+            aria-expanded="false"
+            aria-controls="storyMenu"
+          />
+          <select id="story" hidden>
+            <option value="">All stories</option>
+          </select>
+          <div class="combo-menu" id="storyMenu" role="listbox" hidden></div>
+        </div>
+
         <div class="entity-chip" id="entityChip" hidden>
           <span id="entityChipLabel"></span>
           <button type="button" id="entityChipClear" aria-label="Clear entity filter">&times;</button>

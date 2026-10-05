@@ -70,6 +70,8 @@ class ArticleOut(BaseModel):
     byline: str | None
     section: str | None
     category: str | None
+    story_id: int | None = None
+    story: str | None = None
     summary_text: str | None
     bullets: list[str]
     entities: list[str]
@@ -100,6 +102,16 @@ class ArticleCategoryUpdate(BaseModel):
     category: str | None = None
 
 
+class ArticleStoryUpdate(BaseModel):
+    """story_id=None clears the article's story."""
+
+    story_id: int | None = None
+
+
+class StoryCreate(BaseModel):
+    name: str
+
+
 class ArticleTopicsUpdate(BaseModel):
     topics: list[str] = Field(default_factory=list)
 
@@ -128,6 +140,12 @@ class NewspaperOut(BaseModel):
 class CategoryOut(BaseModel):
     category: str
     count: int
+
+
+class StoryOut(BaseModel):
+    id: int
+    name: str
+    article_count: int
 
 
 class TopicOut(BaseModel):

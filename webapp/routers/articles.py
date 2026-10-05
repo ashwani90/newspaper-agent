@@ -6,10 +6,14 @@
     PATCH /api/articles/{id}/read     mark an article read or unread
     PATCH /api/articles/{id}/favorite mark an article a favorite, or not
     PATCH /api/articles/{id}/category set (or clear) an article's category
+    PATCH /api/articles/{id}/story    file an article under a story, or clear it
     PATCH /api/articles/{id}/topics   replace an article's topic tags
     GET   /api/newspapers             distinct newspapers with article counts
     GET   /api/categories             distinct categories with article counts
     GET   /api/topics                 distinct topics with article counts
+    GET   /api/stories                stories with article counts
+    POST  /api/stories                create a story (returns the existing one
+                                      if the name is already taken)
 """
 
 from __future__ import annotations
@@ -21,7 +25,7 @@ from sqlalchemy import func, or_, select, true
 from sqlalchemy.orm import Session, selectinload
 
 from ..database import get_db
-from ..models import Article, ArticleTopic, Newspaper, Topic
+from ..models import Article, ArticleTopic, Newspaper, Story, Topic
 from ..schemas import (
     ArticleCategoryUpdate,
     ArticleDetailOut,
@@ -29,12 +33,15 @@ from ..schemas import (
     ArticleListResponse,
     ArticleOut,
     ArticleReadUpdate,
+    ArticleStoryUpdate,
     ArticleTopicsUpdate,
     BulkIngestRequest,
     BulkIngestResponse,
     CategoryOut,
     EntityOut,
     NewspaperOut,
+    StoryCreate,
+    StoryOut,
     TopicOut,
     TopicTagOut,
 )
@@ -65,6 +72,8 @@ def _to_article_out(article: Article) -> ArticleOut:
         byline=article.byline,
         section=article.section,
         category=article.category,
+        story_id=article.story_id,
+        story=article.story.name if article.story else None,
         summary_text=article.summary_text,
         bullets=article.bullets or [],
         entities=article.entities or [],
@@ -202,6 +211,7 @@ def list_articles(
     ),
     category: str | None = Query(None, description="Filter by category (exact)"),
     topic: str | None = Query(None, description="Filter by topic name (exact)"),
+    story_id: int | None = Query(None, description="Filter by story id"),
     entity: str | None = Query(None, description="Filter by entity name (exact)"),
     date_from: date | None = Query(None, description="Published on or after this date"),
     date_to: date | None = Query(None, description="Published on or before this date"),
@@ -214,6 +224,7 @@ def list_articles(
 ) -> ArticleListResponse:
     stmt = select(Article).options(
         selectinload(Article.newspaper),
+        selectinload(Article.story),
         selectinload(Article.topic_links).selectinload(ArticleTopic.topic),
     )
     stmt = stmt.join(Newspaper, Newspaper.id == Article.newspaper_id)
@@ -228,6 +239,8 @@ def list_articles(
             .join(Topic, Topic.id == ArticleTopic.topic_id)
             .where(Topic.name.ilike(topic))
         )
+    if story_id is not None:
+        stmt = stmt.where(Article.story_id == story_id)
     if entity:
         stmt = stmt.where(Article.entities.contains([entity]))
     if date_from:
@@ -276,6 +289,7 @@ def get_article(article_id: int, db: Session = Depends(get_db)) -> ArticleDetail
         select(Article)
         .options(
             selectinload(Article.newspaper),
+            selectinload(Article.story),
             selectinload(Article.topic_links).selectinload(ArticleTopic.topic),
         )
         .where(Article.id == article_id)
@@ -299,6 +313,7 @@ def set_read_status(
         select(Article)
         .options(
             selectinload(Article.newspaper),
+            selectinload(Article.story),
             selectinload(Article.topic_links).selectinload(ArticleTopic.topic),
         )
         .where(Article.id == article_id)
@@ -320,6 +335,7 @@ def set_favorite_status(
         select(Article)
         .options(
             selectinload(Article.newspaper),
+            selectinload(Article.story),
             selectinload(Article.topic_links).selectinload(ArticleTopic.topic),
         )
         .where(Article.id == article_id)
@@ -341,6 +357,7 @@ def set_category(
         select(Article)
         .options(
             selectinload(Article.newspaper),
+            selectinload(Article.story),
             selectinload(Article.topic_links).selectinload(ArticleTopic.topic),
         )
         .where(Article.id == article_id)
@@ -349,6 +366,30 @@ def set_category(
         raise HTTPException(status_code=404, detail="Article not found")
     category = (payload.category or "").strip()
     article.category = category or None
+    db.commit()
+    db.refresh(article)
+    return _to_article_out(article)
+
+
+@router.patch("/articles/{article_id}/story", response_model=ArticleOut)
+def set_story(
+    article_id: int, payload: ArticleStoryUpdate, db: Session = Depends(get_db)
+) -> ArticleOut:
+    """File one article under a story, or clear it (story_id=null)."""
+    article = db.scalar(
+        select(Article)
+        .options(
+            selectinload(Article.newspaper),
+            selectinload(Article.story),
+            selectinload(Article.topic_links).selectinload(ArticleTopic.topic),
+        )
+        .where(Article.id == article_id)
+    )
+    if article is None:
+        raise HTTPException(status_code=404, detail="Article not found")
+    if payload.story_id is not None and db.get(Story, payload.story_id) is None:
+        raise HTTPException(status_code=404, detail="Story not found")
+    article.story_id = payload.story_id
     db.commit()
     db.refresh(article)
     return _to_article_out(article)
@@ -363,6 +404,7 @@ def set_topics(
         select(Article)
         .options(
             selectinload(Article.newspaper),
+            selectinload(Article.story),
             selectinload(Article.topic_links).selectinload(ArticleTopic.topic),
         )
         .where(Article.id == article_id)
@@ -456,3 +498,32 @@ def list_entities(db: Session = Depends(get_db)) -> list[EntityOut]:
         .order_by(count_expr.desc())
     ).all()
     return [EntityOut(entity=r[0], count=r[1]) for r in rows]
+
+
+@router.get("/stories", response_model=list[StoryOut])
+def list_stories(db: Session = Depends(get_db)) -> list[StoryOut]:
+    rows = db.execute(
+        select(Story.id, Story.name, func.count(Article.id))
+        .outerjoin(Article, Article.story_id == Story.id)
+        .group_by(Story.id)
+        .order_by(func.lower(Story.name))
+    ).all()
+    return [StoryOut(id=r[0], name=r[1], article_count=r[2]) for r in rows]
+
+
+@router.post("/stories", response_model=StoryOut)
+def create_story(payload: StoryCreate, db: Session = Depends(get_db)) -> StoryOut:
+    """Add a story to the dropdown. A name that already exists (ignoring case)
+    returns the existing story rather than erroring or duplicating."""
+    name = " ".join(payload.name.split())
+    if not name:
+        raise HTTPException(status_code=422, detail="Story name is required")
+    if len(name) > 200:
+        raise HTTPException(status_code=422, detail="Story name is too long")
+    story = db.scalar(select(Story).where(func.lower(Story.name) == name.lower()))
+    if story is None:
+        story = Story(name=name)
+        db.add(story)
+        db.commit()
+    count = db.scalar(select(func.count(Article.id)).where(Article.story_id == story.id))
+    return StoryOut(id=story.id, name=story.name, article_count=count or 0)

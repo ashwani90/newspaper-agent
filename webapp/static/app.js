@@ -10,6 +10,7 @@ const state = {
     newspaper: "",
     category: "",
     topic: "",
+    story_id: "",
     entity: "",
     date_from: "",
     date_to: "",
@@ -26,6 +27,7 @@ const els = {
   newspaper: document.getElementById("newspaper"),
   category: document.getElementById("category"),
   topic: document.getElementById("topic"),
+  story: document.getElementById("story"),
   dateFrom: document.getElementById("dateFrom"),
   dateTo: document.getElementById("dateTo"),
   unreadOnly: document.getElementById("unreadOnly"),
@@ -46,7 +48,13 @@ const els = {
   categoryMenu: document.getElementById("categoryMenu"),
   topicSearch: document.getElementById("topicSearch"),
   topicMenu: document.getElementById("topicMenu"),
+  storySearch: document.getElementById("storySearch"),
+  storyMenu: document.getElementById("storyMenu"),
 };
+
+// Stories as last fetched from /api/stories ({id, name, article_count}) --
+// feeds both the sidebar filter and each card's story dropdown.
+let stories = [];
 
 // Searchable dropdown: a plain <select> stays in the DOM (hidden) as the
 // source of truth -- every existing bit of code that reads els.newspaper /
@@ -176,6 +184,7 @@ function makeSearchableSelect(select, input, menu) {
 const newspaperCombo = makeSearchableSelect(els.newspaper, els.newspaperSearch, els.newspaperMenu);
 const categoryCombo = makeSearchableSelect(els.category, els.categorySearch, els.categoryMenu);
 const topicCombo = makeSearchableSelect(els.topic, els.topicSearch, els.topicMenu);
+const storyCombo = makeSearchableSelect(els.story, els.storySearch, els.storyMenu);
 
 // Theme: an explicit choice is saved and always wins; with no saved choice,
 // the OS preference (prefers-color-scheme, handled in CSS) applies instead --
@@ -226,11 +235,14 @@ async function fetchJSON(url, options) {
 
 async function loadFilterOptions() {
   try {
-    const [newspapers, categories, topics] = await Promise.all([
+    const [newspapers, categories, topics, storyList] = await Promise.all([
       fetchJSON(`${API}/newspapers`),
       fetchJSON(`${API}/categories`),
       fetchJSON(`${API}/topics`),
+      fetchJSON(`${API}/stories`),
     ]);
+    stories = storyList;
+    refreshStoryFilter();
 
     for (const n of newspapers) {
       const opt = document.createElement("option");
@@ -271,6 +283,21 @@ async function loadFilterOptions() {
   } catch (err) {
     console.error("Failed to load filter options", err);
   }
+}
+
+// Rebuild the sidebar story filter's <option>s from `stories`, keeping the
+// current selection if it still exists.
+function refreshStoryFilter() {
+  const selected = els.story.value;
+  els.story.length = 1; // keep the "All stories" option
+  for (const st of stories) {
+    const opt = document.createElement("option");
+    opt.value = String(st.id);
+    opt.textContent = `${st.name} (${st.article_count})`;
+    els.story.appendChild(opt);
+  }
+  els.story.value = selected;
+  storyCombo.sync();
 }
 
 function formatDate(iso) {
@@ -335,11 +362,21 @@ function renderCard(article) {
 
   const eyebrowRow = document.createElement("div");
   eyebrowRow.className = "eyebrow-row";
-  eyebrowRow.hidden = !article.category;
   const eyebrowBadge = document.createElement("span");
   eyebrowBadge.className = "eyebrow";
-  eyebrowBadge.textContent = article.category || "";
   eyebrowRow.appendChild(eyebrowBadge);
+  const storyBadge = document.createElement("span");
+  storyBadge.className = "story-badge";
+  eyebrowRow.appendChild(storyBadge);
+  // Category + story badges live in one row; it is hidden when both are empty.
+  eyebrowRow.refresh = () => {
+    eyebrowBadge.textContent = article.category || "";
+    eyebrowBadge.hidden = !article.category;
+    storyBadge.textContent = article.story ? `Story: ${article.story}` : "";
+    storyBadge.hidden = !article.story;
+    eyebrowRow.hidden = !article.category && !article.story;
+  };
+  eyebrowRow.refresh();
 
   const h3 = document.createElement("h3");
   h3.textContent = article.headline;
@@ -370,7 +407,7 @@ function renderCard(article) {
     entities.innerHTML = `<strong>Entities:</strong> ${escapeHtml(article.entities.join(", "))}`;
   }
 
-  const tagRow = buildTagRow(article, eyebrowRow, eyebrowBadge);
+  const tagRow = buildTagRow(article, eyebrowRow);
 
   const toggleBtn = document.createElement("button");
   toggleBtn.className = "toggle-original";
@@ -405,7 +442,7 @@ function renderCard(article) {
   return shell;
 }
 
-function buildTagRow(article, eyebrowRow, eyebrowBadge) {
+function buildTagRow(article, eyebrowRow) {
   const tagRow = document.createElement("div");
   tagRow.className = "tag-row";
   for (const t of article.topics || []) {
@@ -417,12 +454,12 @@ function buildTagRow(article, eyebrowRow, eyebrowBadge) {
   const editBtn = document.createElement("button");
   editBtn.className = "edit-tags-btn";
   editBtn.textContent = "Edit tags";
-  editBtn.addEventListener("click", () => startEditTags(article, tagRow, eyebrowRow, eyebrowBadge));
+  editBtn.addEventListener("click", () => startEditTags(article, tagRow, eyebrowRow));
   tagRow.appendChild(editBtn);
   return tagRow;
 }
 
-function startEditTags(article, tagRow, eyebrowRow, eyebrowBadge) {
+function startEditTags(article, tagRow, eyebrowRow) {
   const editor = document.createElement("div");
   editor.className = "tag-editor";
 
@@ -431,6 +468,72 @@ function startEditTags(article, tagRow, eyebrowRow, eyebrowBadge) {
   catInput.placeholder = "Category";
   catInput.value = article.category || "";
   catInput.setAttribute("list", "categoryOptions");
+
+  // Story: optional dropdown of existing stories, plus a small input to add
+  // a new one to the dropdown (created on the server when Save is pressed, or
+  // straight away via "Add").
+  const storyWrap = document.createElement("div");
+  storyWrap.className = "story-picker";
+  const storySelect = document.createElement("select");
+  storySelect.setAttribute("aria-label", "Story");
+  function fillStorySelect(selectedId) {
+    storySelect.innerHTML = "";
+    const none = document.createElement("option");
+    none.value = "";
+    none.textContent = "No story";
+    storySelect.appendChild(none);
+    for (const st of stories) {
+      const opt = document.createElement("option");
+      opt.value = String(st.id);
+      opt.textContent = st.name;
+      storySelect.appendChild(opt);
+    }
+    storySelect.value = selectedId == null ? "" : String(selectedId);
+  }
+  fillStorySelect(article.story_id);
+  const newStoryInput = document.createElement("input");
+  newStoryInput.type = "text";
+  newStoryInput.placeholder = "New story name";
+  newStoryInput.maxLength = 200;
+  const addStoryBtn = document.createElement("button");
+  addStoryBtn.type = "button";
+  addStoryBtn.className = "btn btn--ghost";
+  addStoryBtn.textContent = "Add story";
+  storyWrap.appendChild(storySelect);
+  storyWrap.appendChild(newStoryInput);
+  storyWrap.appendChild(addStoryBtn);
+
+  async function addStory() {
+    const name = newStoryInput.value.trim();
+    if (!name) return null;
+    addStoryBtn.disabled = true;
+    try {
+      const created = await fetchJSON(`${API}/stories`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (!stories.some((st) => st.id === created.id)) stories.push(created);
+      stories.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+      fillStorySelect(created.id);
+      newStoryInput.value = "";
+      refreshStoryFilter();
+      return created;
+    } catch (err) {
+      console.error("Failed to add story", err);
+      alert(`Could not add story: ${err.message}`);
+      return null;
+    } finally {
+      addStoryBtn.disabled = false;
+    }
+  }
+  addStoryBtn.addEventListener("click", addStory);
+  newStoryInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      addStory();
+    }
+  });
 
   const topicsInput = document.createElement("input");
   topicsInput.type = "text";
@@ -446,29 +549,37 @@ function startEditTags(article, tagRow, eyebrowRow, eyebrowBadge) {
   cancelBtn.textContent = "Cancel";
 
   editor.appendChild(catInput);
+  editor.appendChild(storyWrap);
   editor.appendChild(topicsInput);
   editor.appendChild(saveBtn);
   editor.appendChild(cancelBtn);
   tagRow.replaceWith(editor);
 
   cancelBtn.addEventListener("click", () => {
-    editor.replaceWith(buildTagRow(article, eyebrowRow, eyebrowBadge));
+    editor.replaceWith(buildTagRow(article, eyebrowRow));
   });
 
   saveBtn.addEventListener("click", async () => {
     saveBtn.disabled = true;
     saveBtn.textContent = "Saving...";
     try {
+      // A name typed into "New story" but not yet added is added on Save.
+      if (newStoryInput.value.trim()) {
+        const created = await addStory();
+        if (!created) throw new Error("new story was not added");
+      }
       const updated = await saveTagEdits(
         article.id,
         catInput.value,
-        topicsInput.value
+        topicsInput.value,
+        storySelect.value ? Number(storySelect.value) : null
       );
       article.category = updated.category;
       article.topics = updated.topics;
-      eyebrowBadge.textContent = article.category || "";
-      eyebrowRow.hidden = !article.category;
-      editor.replaceWith(buildTagRow(article, eyebrowRow, eyebrowBadge));
+      article.story_id = updated.story_id;
+      article.story = updated.story;
+      eyebrowRow.refresh();
+      editor.replaceWith(buildTagRow(article, eyebrowRow));
       loadFilterOptions();
     } catch (err) {
       console.error("Failed to save tags", err);
@@ -479,11 +590,16 @@ function startEditTags(article, tagRow, eyebrowRow, eyebrowBadge) {
   });
 }
 
-async function saveTagEdits(id, categoryText, topicsText) {
+async function saveTagEdits(id, categoryText, topicsText, storyId) {
   await fetchJSON(`${API}/articles/${id}/category`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ category: categoryText.trim() || null }),
+  });
+  await fetchJSON(`${API}/articles/${id}/story`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ story_id: storyId }),
   });
   const topics = topicsText
     .split(",")
@@ -622,6 +738,7 @@ function applyFiltersFromInputs() {
     newspaper: els.newspaper.value,
     category: els.category.value,
     topic: els.topic.value,
+    story_id: els.story.value,
     entity: state.filters.entity,
     date_from: els.dateFrom.value,
     date_to: els.dateTo.value,
@@ -652,6 +769,7 @@ els.search.addEventListener("input", () => {
 els.newspaper.addEventListener("change", applyFiltersFromInputs);
 els.category.addEventListener("change", applyFiltersFromInputs);
 els.topic.addEventListener("change", applyFiltersFromInputs);
+els.story.addEventListener("change", applyFiltersFromInputs);
 els.dateFrom.addEventListener("change", applyFiltersFromInputs);
 els.dateTo.addEventListener("change", applyFiltersFromInputs);
 els.unreadOnly.addEventListener("change", applyFiltersFromInputs);
@@ -662,6 +780,7 @@ els.clearFilters.addEventListener("click", () => {
   els.newspaper.value = "";
   els.category.value = "";
   els.topic.value = "";
+  els.story.value = "";
   els.dateFrom.value = "";
   els.dateTo.value = "";
   els.unreadOnly.checked = false;
@@ -670,6 +789,7 @@ els.clearFilters.addEventListener("click", () => {
   newspaperCombo.sync();
   categoryCombo.sync();
   topicCombo.sync();
+  storyCombo.sync();
   applyFiltersFromInputs();
 });
 
