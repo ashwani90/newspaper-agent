@@ -21,7 +21,7 @@ from __future__ import annotations
 from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, or_, select, true
+from sqlalchemy import DateTime, cast, func, or_, select, true
 from sqlalchemy.orm import Session, selectinload
 
 from ..database import get_db
@@ -243,13 +243,16 @@ def list_articles(
         stmt = stmt.where(Article.story_id == story_id)
     if entity:
         stmt = stmt.where(Article.entities.contains([entity]))
+    # Articles with no published_at (older CLI ingests) fall back to their
+    # edition's date, so the date filter doesn't silently drop them.
+    published = func.coalesce(Article.published_at, cast(Newspaper.edition_date, DateTime))
     if date_from:
         stmt = stmt.where(
-            Article.published_at >= datetime.combine(date_from, datetime.min.time())
+            published >= datetime.combine(date_from, datetime.min.time())
         )
     if date_to:
         stmt = stmt.where(
-            Article.published_at <= datetime.combine(date_to, datetime.max.time())
+            published <= datetime.combine(date_to, datetime.max.time())
         )
     if q:
         like = f"%{q}%"
