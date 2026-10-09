@@ -462,6 +462,41 @@ def guess_edition_date(first_page_text: str) -> date | None:
     return None
 
 
+# Indian e-paper downloads carry the edition date in the filename, day first:
+# The_Times_Of_India_Delhi_09_10_2026.pdf is 9 October 2026.
+_FILENAME_DATE = re.compile(r"(?:^|_)(\d{1,2})_(\d{1,2})_(\d{4})(?=$|[_.\s-])")
+
+
+def edition_date_from_filename(name: str | Path) -> date | None:
+    """Parse a ``_DD_MM_YYYY`` date out of an e-paper filename, or None.
+
+    Accepts a full path, a filename or a bare stem. Day comes first (Indian
+    e-paper naming). Impossible dates (31_02_2026) and implausible years
+    give None rather than a guess.
+    """
+    for match in _FILENAME_DATE.finditer(Path(str(name)).name):
+        day, month, year = (int(g) for g in match.groups())
+        if not 1990 <= year <= 2100:
+            continue
+        try:
+            return date(year, month, day)
+        except ValueError:
+            continue
+    return None
+
+
+def resolve_edition_date(filename: str | Path, detected: date | None) -> date | None:
+    """The edition date to store: the filename's when it has one, else the
+    masthead guess.
+
+    The masthead regex is unreliable on some layouts (Times of India pages
+    yield nothing, or stray dates like 1971-03-07 from inside an article),
+    whereas the e-paper filename is authoritative.
+    """
+    from_name = edition_date_from_filename(filename)
+    return from_name if from_name is not None else detected
+
+
 # A handful of newspaper pages turn out to have a pathological content
 # stream -- observed cause: an RC4-encrypted page carrying a huge embedded
 # vector graphic (a Form XObject several MB compressed), which pdfminer's
@@ -668,7 +703,7 @@ def extract_pdf(
         page_count=total,
         pages=pages,
         source_name=path.stem,
-        edition_date=guess_edition_date(first_text),
+        edition_date=resolve_edition_date(path.name, guess_edition_date(first_text)),
         selected=set(pages_wanted) if pages_wanted else None,
         skipped_by_selection=skipped_by_selection,
         timed_out_pages=timed_out_pages,

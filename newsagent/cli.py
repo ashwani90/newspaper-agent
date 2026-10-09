@@ -52,6 +52,7 @@ from .report import write_report
 from .pipeline import (
     _compact_pages,
     find_response_files,
+    fix_edition_dates,
     ingest_inbox,
     ingest_pdf,
     load_response,
@@ -545,6 +546,30 @@ def cmd_editions(_args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_fix_dates(args: argparse.Namespace) -> int:
+    changes = fix_edition_dates(dry_run=args.dry_run)
+    if not changes:
+        console.print("[green]Every edition's date already matches its filename.[/green]")
+        return 0
+    verb = "Would change" if args.dry_run else "Changed"
+    table = Table(title=f"{verb} {len(changes)} edition date(s)")
+    table.add_column("#", justify="right")
+    table.add_column("Source")
+    table.add_column("Before")
+    table.add_column("After")
+    for row in changes:
+        table.add_row(
+            str(row["edition_id"]),
+            row["name"] or "-",
+            row["before"].isoformat() if row["before"] else "-",
+            row["after"].isoformat(),
+        )
+    console.print(table)
+    if args.dry_run:
+        console.print("[yellow]Dry run -- nothing written. Re-run without --dry-run to apply.[/yellow]")
+    return 0
+
+
 def cmd_stats(_args: argparse.Namespace) -> int:
     data = queries.stats()
     table = Table(title="Library", show_header=False)
@@ -801,6 +826,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("editions", help="list ingested newspaper editions")
     p.set_defaults(func=cmd_editions)
+
+    p = sub.add_parser(
+        "fix-dates",
+        help="set each edition's date from its _DD_MM_YYYY filename (one-off repair)",
+    )
+    p.add_argument(
+        "--dry-run", action="store_true", help="show what would change without writing"
+    )
+    p.set_defaults(func=cmd_fix_dates)
 
     p = sub.add_parser("stats", help="library counts")
     p.set_defaults(func=cmd_stats)

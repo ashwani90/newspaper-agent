@@ -17,11 +17,12 @@ Design notes:
 from __future__ import annotations
 
 import logging
+from datetime import date, datetime
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from .config import CONFIG
@@ -38,6 +39,7 @@ from .db import (
 from .extract import (
     PdfDocument,
     classify_document,
+    edition_date_from_filename,
     extract_pdf,
     pdf_page_count,
     resolve_selection,
@@ -208,6 +210,88 @@ def _upsert_edition(
     return edition
 
 
+def published_at_for(edition_date: date | None) -> datetime | None:
+    """The ``Article.published_at`` value for an edition dated ``edition_date``.
+
+    Midnight of the edition date as a naive datetime -- the same value the
+    webapp's ``/articles/bulk`` endpoint stores -- or None when the edition
+    has no date.
+    """
+    if edition_date is None:
+        return None
+    return datetime.combine(edition_date, datetime.min.time())
+
+
+def backfill_published_at(*, dry_run: bool = True) -> list[dict]:
+    """Fill ``Article.published_at`` from the edition date where it is NULL.
+
+    The webapp's date filter reads ``published_at``, which older CLI ingests
+    never set. Never overwrites a value that is already set (e.g. by the
+    webapp's bulk ingest). Returns one dict per edition touched
+    (edition_id, name, edition_date, articles); writes nothing when dry_run.
+    """
+    changes: list[dict] = []
+    with session_scope() as session:
+        rows = session.execute(
+            select(Edition.id, Edition.name, Edition.edition_date, func.count(Article.id))
+            .join(Article, Article.newspaper_id == Edition.id)
+            .where(Article.published_at.is_(None), Edition.edition_date.is_not(None))
+            .group_by(Edition.id, Edition.name, Edition.edition_date)
+            .order_by(Edition.id)
+        ).all()
+        for edition_id, name, edition_date, count in rows:
+            changes.append(
+                {
+                    "edition_id": edition_id,
+                    "name": name,
+                    "edition_date": edition_date,
+                    "articles": count,
+                }
+            )
+            if not dry_run:
+                session.execute(
+                    update(Article)
+                    .where(
+                        Article.newspaper_id == edition_id,
+                        Article.published_at.is_(None),
+                    )
+                    .values(published_at=published_at_for(edition_date))
+                )
+        if dry_run:
+            session.rollback()
+    return changes
+
+
+def fix_edition_dates(*, dry_run: bool = True) -> list[dict]:
+    """Set each edition's date from its ``_DD_MM_YYYY`` filename.
+
+    One-off repair for editions stored before the filename date was
+    preferred: touches only rows whose filename carries a date and whose
+    stored date is missing or different. Returns one dict per change
+    (edition_id, name, before, after); writes nothing when dry_run.
+    """
+    changes: list[dict] = []
+    with session_scope() as session:
+        for edition in session.scalars(select(Edition).order_by(Edition.id)):
+            source = edition.pdf_path or edition.source_file or edition.name or ""
+            from_name = edition_date_from_filename(source)
+            if from_name is None or edition.edition_date == from_name:
+                continue
+            changes.append(
+                {
+                    "edition_id": edition.id,
+                    "name": edition.name,
+                    "before": edition.edition_date,
+                    "after": from_name,
+                }
+            )
+            if not dry_run:
+                edition.edition_date = from_name
+        if dry_run:
+            session.rollback()
+    return changes
+
+
 def _resolve_topic_rows(session: Session, specs: list[TopicSpec]) -> dict[str, Topic]:
     """Map casefolded topic name -> Topic row, for validating model output."""
     sync_topics(session, specs)
@@ -358,6 +442,8 @@ def ingest_pdf(
     # ---- Stage 2: store articles ----------------------------------------
     new_article_ids: list[int] = []
     with session_scope() as session:
+        edition = session.get(Edition, report.edition_id)
+        published_at = published_at_for(edition.edition_date if edition else None)
         for page_no, art in stitched:
             body = (art.body_text or "").strip()
             if len(body) < MIN_BODY_CHARS:
@@ -371,6 +457,7 @@ def ingest_pdf(
                 section=(art.section or None),
                 original_text=body,
                 word_count=len(body.split()),
+                published_at=published_at,
             )
             session.add(row)
             session.flush()
@@ -899,6 +986,7 @@ def load_response(
                 report.errors.append(f"no edition with id {edition_id}")
                 return report
         report.edition_id = edition.id
+        published_at = published_at_for(edition.edition_date)
 
         page_texts = {
             page.page_number: page.column_text
@@ -991,6 +1079,8 @@ def load_response(
                 row.original_text = body
                 row.word_count = len(body.split())
                 row.body_source = body_source
+                if row.published_at is None:
+                    row.published_at = published_at
 
                 row.summary_text = article.summary
                 row.bullets = article.bullets
