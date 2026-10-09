@@ -351,13 +351,17 @@ function renderCard(article) {
   );
   favoriteBtn.innerHTML =
     '<svg viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.6 6.1.7-4.5 4.3 1.2 6-5.4-3-5.4 3 1.2-6-4.5-4.3 6.1-.7z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>';
-  favoriteBtn.addEventListener("click", () => toggleFavorite(article.id, !article.is_favorite));
+  // Read the current state off the button, not the render-time article --
+  // otherwise a second click re-sends the same value and can never undo it.
+  favoriteBtn.addEventListener("click", () =>
+    toggleFavorite(article.id, !favoriteBtn.classList.contains("is-favorite"))
+  );
   meta.appendChild(favoriteBtn);
 
   const markBtn = document.createElement("button");
   markBtn.className = "mark-read-btn";
   markBtn.textContent = article.is_read ? "Mark unread" : "Mark read";
-  markBtn.addEventListener("click", () => toggleRead(article.id, !article.is_read));
+  markBtn.addEventListener("click", () => toggleRead(article.id, !card.classList.contains("is-read")));
   meta.appendChild(markBtn);
 
   const eyebrowRow = document.createElement("div");
@@ -773,7 +777,12 @@ els.story.addEventListener("change", applyFiltersFromInputs);
 els.dateFrom.addEventListener("change", applyFiltersFromInputs);
 els.dateTo.addEventListener("change", applyFiltersFromInputs);
 els.unreadOnly.addEventListener("change", applyFiltersFromInputs);
-els.favoriteOnly.addEventListener("change", applyFiltersFromInputs);
+els.favoriteOnly.addEventListener("change", () => {
+  // Favorites are usually starred while reading and then marked read, so
+  // "favorites + unread only" is nearly always empty -- drop unread-only.
+  if (els.favoriteOnly.checked) els.unreadOnly.checked = false;
+  applyFiltersFromInputs();
+});
 
 els.clearFilters.addEventListener("click", () => {
   els.search.value = "";
